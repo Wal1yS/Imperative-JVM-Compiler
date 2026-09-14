@@ -1,0 +1,25 @@
+type Grades is array [4] integer
+
+type Student is record
+    var id: integer
+    var grades: Grades
+end
+
+routine average(s: Student) : real is
+    var total is 0
+
+    for i in 0 .. s.grades.size - 1 loop
+        total := total + s.grades[i]
+    end
+
+    return (total as real) / s.grades.size
+end
+
+routine main() is
+    var st: Student
+    st.id := 101
+    st.grades[0] := 80; st.grades[1] := 90
+    st.grades[2] := 70; st.grades[3] := 95
+
+    print "Average of student ", st.id, " is: ", average(st)
+end

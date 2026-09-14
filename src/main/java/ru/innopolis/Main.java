@@ -10,7 +10,7 @@ import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
-        String filePath = "examples/1.imp";
+        String filePath = "examples/14.txt";
 
         try {
             String sourceCode = Files.readString(Path.of(filePath));

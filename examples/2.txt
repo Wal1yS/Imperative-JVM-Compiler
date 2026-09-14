@@ -1,0 +1,15 @@
+routine main() is
+    var flag is true
+    var n is flag as integer
+    print "true as integer is: ", n
+
+    var back is n as boolean
+    print "1 as boolean is: ", back
+
+    var count is 7
+    var half is (count as real) / 2
+    print "7 / 2 in real is: ", half
+
+    var rounded is half as integer
+    print "3.5 as integer is: ", rounded
+end

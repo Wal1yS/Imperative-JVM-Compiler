@@ -1,0 +1,31 @@
+type Point is record
+    var x: integer
+    var y: integer
+end
+
+type Segment is record
+    var start: Point
+    var finish: Point
+end
+
+type Figure is record
+    var base: Segment
+    var closed: boolean
+end
+
+routine squaredLength(s: Segment) : integer is
+    var dx is s.finish.x - s.start.x
+    var dy is s.finish.y - s.start.y
+    return dx * dx + dy * dy
+end
+
+routine main() is
+    var f: Figure
+    f.base.start.x := 0
+    f.base.start.y := 0
+    f.base.finish.x := 3
+    f.base.finish.y := 4
+    f.closed := false
+
+    print "Squared length is: ", squaredLength(f.base)
+end
