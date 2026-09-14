@@ -1,0 +1,7 @@
+routine main() is
+    var greeting: string is "Hello, Compilers Team!"
+    var version: integer is 1
+
+    // comment
+    print greeting, " Project version: ", version
+end

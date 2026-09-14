@@ -1,0 +1,14 @@
+routine main() is
+    var threshold: real is 10.5
+    var value: integer is 15
+    var isAlert: boolean
+
+    // comment
+    if value > 10 then
+        isAlert := true
+    else
+        isAlert := false
+    end
+
+    print "Threshold exceeded: ", isAlert
+end

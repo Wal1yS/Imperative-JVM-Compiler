@@ -1,0 +1,18 @@
+type Box is record
+    var size: integer
+end
+
+routine main() is
+    var boxA: Box
+    var boxB: Box
+
+    boxA.size := 10
+    print "Initial boxA size: ", boxA.size
+
+    // comment
+    boxB := boxA
+
+    boxB.size := 50
+
+    print "Final boxA size after modifying boxB: ", boxA.size
+end

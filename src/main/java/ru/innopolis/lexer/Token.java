@@ -1,6 +1,6 @@
 package ru.innopolis.lexer;
 
-abstract class Token {
+public abstract class Token {
     private final TokenType type;
     private final Span position;
 
@@ -16,6 +16,11 @@ abstract class Token {
     public Span getPosition(){
         return this.position;
     }
+
+    @Override
+    public String toString() {
+        return String.format("[%s at %s]", type, position);
+    }
 }
 
 class IntToken extends Token{
@@ -28,6 +33,11 @@ class IntToken extends Token{
 
     public int getValue(){
         return this.value;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s %d at %s]", getType(), value, getPosition());
     }
 }
 
@@ -42,6 +52,11 @@ class RealToken extends Token{
     public double getValue(){
         return this.value;
     }
+
+    @Override
+    public String toString() {
+        return String.format("[%s %f at %s]", getType(), value, getPosition());
+    }
 }
 
 class StringToken extends Token{
@@ -55,6 +70,11 @@ class StringToken extends Token{
     public String getValue(){
         return this.value;
     }
+
+    @Override
+    public String toString() {
+        return String.format("[%s \"%s\" at %s]", getType(), value, getPosition());
+    }
 }
 
 class IdentifierToken extends Token{
@@ -67,6 +87,11 @@ class IdentifierToken extends Token{
 
     public String getName(){
         return this.name;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s '%s' at %s]", getType(), name, getPosition());
     }
 }
 

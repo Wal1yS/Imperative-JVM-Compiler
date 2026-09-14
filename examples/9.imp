@@ -1,0 +1,17 @@
+routine gcd(a: integer, b: integer) : integer is
+    // comment
+    while a /= b loop
+        if a > b then
+            a := a - b
+        else
+            b := b - a
+        end
+    end
+
+    return a
+end
+
+routine main() is
+    var result is gcd(48, 18)
+    print "GCD of 48 and 18 is: ", result
+end

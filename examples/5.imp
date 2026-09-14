@@ -1,0 +1,27 @@
+routine fibonacci(n: integer) : integer is
+    var a is 0
+    var b is 1
+    var temp: integer
+
+    if n <= 0 then
+        return 0
+    end
+
+    if n = 1 then
+        return 1
+    end
+
+    // comment
+    for i in 2 .. n loop
+        temp := a + b
+        a := b
+        b := temp
+    end
+
+    return b
+end
+
+routine main() is
+    var result is fibonacci(7)
+    print "7th Fibonacci number is: ", result
+end

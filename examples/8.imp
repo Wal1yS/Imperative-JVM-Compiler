@@ -1,0 +1,22 @@
+type IntArray is array [4] integer
+
+routine findMax(arr: IntArray, size: integer) : integer is
+    var maxVal is arr[0]
+
+    // comment
+    for i in 1 .. size - 1 loop
+        if arr[i] > maxVal then
+            maxVal := arr[i]
+        end
+    end
+
+    return maxVal
+end
+
+routine main() is
+    var data: IntArray
+    data[0] := 15; data[1] := 42; data[2] := 8; data[3] := 23
+
+    var maximum is findMax(data, 4)
+    print "Maximum value in array is: ", maximum
+end

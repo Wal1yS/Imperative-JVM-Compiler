@@ -1,0 +1,13 @@
+type IntArray is array [10] integer
+
+routine main() is
+    var arr: IntArray
+
+    // comment
+    for i in 0 .. 9 loop
+        arr[i] := i * i
+    end
+
+    print "Square of index 5 is: ", arr[5]
+    print "Square of index 9 is: ", arr[9]
+end

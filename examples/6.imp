@@ -1,0 +1,10 @@
+routine main() is
+    print "Starting engine test..."
+
+    // comment
+    for i in 1 .. 5 reverse loop
+        print "T-minus: ", i
+    end
+
+    print "Test complete!"
+end
