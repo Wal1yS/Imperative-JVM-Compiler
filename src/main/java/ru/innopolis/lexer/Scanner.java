@@ -122,6 +122,21 @@ public class Scanner {
                     addToken(TokenType.NOT_EQUAL);
                 } else if (match('/')) {
                     while (peek() != '\n' && !isAtEnd()) step();
+                } else if (match('*')) {
+                    while (!isAtEnd()) {
+                        if (peek() == '\n') {
+                            line++;
+                            column = 1;
+                        }
+
+                        if (peek() == '*' && peekNext() == '/') {
+                            step();
+                            step();
+                            break;
+                        }
+
+                        step();
+                    }
                 } else {
                     addToken(TokenType.DIV);
                 }

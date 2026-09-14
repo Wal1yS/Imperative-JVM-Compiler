@@ -2,6 +2,12 @@ routine main() is
     var greeting: string is "Hello, Compilers Team!"
     var version: integer is 1
 
-    // comment
+    /*
+    1. 1 line
+    2. 2 line
+    3. 3 line
+    4. 4 line
+    5. 5 line
+    */
     print greeting, " Project version: ", version
 end
