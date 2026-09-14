@@ -1,0 +1,14 @@
+var x: integer is 100
+
+routine main() is
+    // comment
+    var x: integer is 50
+    print "Outer x is: ", x
+
+    if true then
+        var x: integer is 10
+        print "Inner x is: ", x
+    end
+
+    print "Outer x is still: ", x
+end

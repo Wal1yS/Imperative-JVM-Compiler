@@ -1,0 +1,24 @@
+type Student is record
+    var id: integer
+    var grade: integer
+end
+
+type ClassRoom is array [3] Student
+
+routine main() is
+    var room: ClassRoom
+    var s1: Student
+    var s2: Student
+    var totalGrade is 0
+
+    s1.id := 1; s1.grade := 85
+    s2.id := 2; s2.grade := 92
+
+    room[0] := s1
+    room[1] := s2
+
+    // comment
+    totalGrade := room[0].grade + room[1].grade
+
+    print "Total grade points: ", totalGrade
+end

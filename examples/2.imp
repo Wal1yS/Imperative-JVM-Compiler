@@ -1,0 +1,16 @@
+routine power(base: integer, exp: integer) : integer is
+    var result is 1
+    var i is 0
+
+    while i < exp loop
+        result := result * base
+        i := i + 1
+    end
+
+    return result
+end
+
+routine main() is
+    var calculation is power(2, 10)
+    print "2 to the power of 10 is: ", calculation
+end
