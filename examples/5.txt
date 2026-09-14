@@ -1,0 +1,16 @@
+routine fibonacci(n: integer) : integer is
+    if n <= 0 then
+        return 0
+    end
+
+    if n = 1 then
+        return 1
+    end
+
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+routine main() is
+    var result is fibonacci(7)
+    print "7th Fibonacci number is: ", result
+end

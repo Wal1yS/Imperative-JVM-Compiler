@@ -1,0 +1,17 @@
+routine buildSquares(n: integer) : array integer is
+    var result: array [n] integer
+
+    for i in 0 .. n - 1 loop
+        result[i] := (i + 1) * (i + 1)
+    end
+
+    return result
+end
+
+routine main() is
+    var squares is buildSquares(5)
+
+    for v in squares loop
+        print v
+    end
+end

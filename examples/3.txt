@@ -1,12 +1,13 @@
-var x: integer is 100
+var x is 100
 
 routine main() is
-    // comment
-    var x: integer is 50
+    print "Global x is: ", x
+
+    var x is 42
     print "Outer x is: ", x
 
     if true then
-        var x: integer is 10
+        var x is 67
         print "Inner x is: ", x
     end
 

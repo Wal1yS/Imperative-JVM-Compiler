@@ -1,0 +1,17 @@
+type Box is record
+    var capacity: integer
+end
+
+routine main() is
+    var boxA: Box
+    var boxB: Box
+
+    boxA.capacity := 10
+    print "Initial boxA capacity: ", boxA.capacity
+
+    boxB := boxA
+
+    boxB.capacity := 50
+
+    print "Final boxA capacity after modifying boxB: ", boxA.capacity
+end
