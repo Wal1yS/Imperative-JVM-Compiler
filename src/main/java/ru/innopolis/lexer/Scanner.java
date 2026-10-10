@@ -1,5 +1,7 @@
 package ru.innopolis.lexer;
 
+import ru.innopolis.lexer.token.*;
+
 import java.util.ArrayList;
 import java.util.List;
 

@@ -1,7 +1,7 @@
 package ru.innopolis;
 
 import ru.innopolis.lexer.Scanner;
-import ru.innopolis.lexer.Token;
+import ru.innopolis.lexer.token.Token;
 
 import java.io.IOException;
 import java.io.PrintWriter;
