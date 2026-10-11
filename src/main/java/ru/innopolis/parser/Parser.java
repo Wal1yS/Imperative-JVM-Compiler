@@ -1,6 +1,11 @@
 package ru.innopolis.parser;
 
+import ru.innopolis.ast.ASTNode;
+import ru.innopolis.ast.Declaration;
+import ru.innopolis.ast.Statement;
 import ru.innopolis.ast.expression.*;
+import ru.innopolis.ast.statement.*;
+import ru.innopolis.lexer.Span;
 import ru.innopolis.lexer.token.*;
 import ru.innopolis.lexer.TokenType;
 
@@ -52,6 +57,163 @@ public class Parser {
     public Token consume(TokenType type, String errorMessage) {
         if (check(type)) return step();
         throw new ParseException(errorMessage);
+    }
+
+    private Token peekNext() {
+        if (current + 1 >= tokens.size()) return tokens.get(tokens.size() - 1);
+        return tokens.get(current + 1);
+    }
+
+    private boolean isBodyEnd() {
+        return isEnd() || check(TokenType.END) || check(TokenType.ELSE);
+    }
+
+    private boolean isOnNewLine() {
+        return peek().getPosition().lineNum() > previous().getPosition().lineNum();
+    }
+
+    private void consumeSeparator() {
+        if (match(TokenType.SEMICOLON)) {
+            if (isBodyEnd() || isOnNewLine()) {
+                throw new ParseException("Expected statement after ';' at " + previous().getPosition());
+            }
+            return;
+        }
+        if (isBodyEnd() || isOnNewLine()) return;
+        throw new ParseException("Expected new line or ';' at " + peek().getPosition());
+    }
+
+    public BodyNode parseBody() {
+        Span start = peek().getPosition();
+        List<ASTNode> items = new ArrayList<>();
+
+        while (!isBodyEnd()) {
+            if (check(TokenType.VAR) || check(TokenType.TYPE)) {
+                items.add(parseSimpleDeclaration());
+            } else {
+                items.add(parseStatement());
+            }
+            consumeSeparator();
+        }
+
+        if (items.isEmpty()) return new BodyNode(start, items);
+        return new BodyNode(Span.combine(start, previous().getPosition()), items);
+    }
+
+    public Declaration parseSimpleDeclaration() {
+        throw new ParseException("Declarations are not supported yet at " + peek().getPosition());
+    }
+
+    public Statement parseStatement() {
+        switch (peek().getType()) {
+            case IF: return parseIfStatement();
+            case WHILE: return parseWhileLoop();
+            case FOR: return parseForLoop();
+            case PRINT: return parsePrintStatement();
+            case RETURN: return parseReturnStatement();
+            case IDENTIFIER:
+                TokenType next = peekNext().getType();
+                if (next == TokenType.ASSIGN || next == TokenType.DOT || next == TokenType.LBRACKET) {
+                    return parseAssignment();
+                }
+                return parseRoutineCallStatement();
+            default:
+                throw new ParseException("Expected statement at " + peek().getPosition());
+        }
+    }
+
+    public AssignmentNode parseAssignment() {
+        if (!check(TokenType.IDENTIFIER)) {
+            throw new ParseException("Expected variable name at " + peek().getPosition());
+        }
+        Expression target = parsePrimary();
+        consume(TokenType.ASSIGN, "Expected ':=' after assignment target");
+        Expression value = parseExpression();
+
+        return new AssignmentNode(target, value);
+    }
+
+    public RoutineCallStatementNode parseRoutineCallStatement() {
+        if (!check(TokenType.IDENTIFIER)) {
+            throw new ParseException("Expected routine name at " + peek().getPosition());
+        }
+        if (peekNext().getType() == TokenType.LPAREN) {
+            return new RoutineCallStatementNode((RoutineCallExpressionNode) parsePrimary());
+        }
+
+        IdentifierToken token = (IdentifierToken) step();
+        return new RoutineCallStatementNode(
+                new RoutineCallExpressionNode(token.getPosition(), token.getName(), new ArrayList<>()));
+    }
+
+    public IfStatementNode parseIfStatement() {
+        Token keyword = consume(TokenType.IF, "Expected 'if'");
+        Expression condition = parseExpression();
+        consume(TokenType.THEN, "Expected 'then' after if condition");
+        BodyNode thenBody = parseBody();
+
+        BodyNode elseBody = null;
+        if (match(TokenType.ELSE)) {
+            elseBody = parseBody();
+        }
+        Token end = consume(TokenType.END, "Expected 'end' after if statement");
+
+        return new IfStatementNode(Span.combine(keyword.getPosition(), end.getPosition()),
+                condition, thenBody, elseBody);
+    }
+
+    public WhileLoopNode parseWhileLoop() {
+        Token keyword = consume(TokenType.WHILE, "Expected 'while'");
+        Expression condition = parseExpression();
+        consume(TokenType.LOOP, "Expected 'loop' after while condition");
+        BodyNode body = parseBody();
+        Token end = consume(TokenType.END, "Expected 'end' after while loop");
+
+        return new WhileLoopNode(Span.combine(keyword.getPosition(), end.getPosition()), condition, body);
+    }
+
+    public ForLoopNode parseForLoop() {
+        Token keyword = consume(TokenType.FOR, "Expected 'for'");
+        Token variable = consume(TokenType.IDENTIFIER, "Expected loop variable name after 'for'");
+        consume(TokenType.IN, "Expected 'in' after loop variable");
+        RangeNode range = parseRange();
+        boolean reverse = match(TokenType.REVERSE);
+        consume(TokenType.LOOP, "Expected 'loop' after for range");
+        BodyNode body = parseBody();
+        Token end = consume(TokenType.END, "Expected 'end' after for loop");
+
+        return new ForLoopNode(Span.combine(keyword.getPosition(), end.getPosition()),
+                ((IdentifierToken) variable).getName(), range, reverse, body);
+    }
+
+    public RangeNode parseRange() {
+        Expression start = parseExpression();
+        Expression end = null;
+        if (match(TokenType.DOT_DOT)) {
+            end = parseExpression();
+        }
+
+        return new RangeNode(start, end);
+    }
+
+    public PrintStatementNode parsePrintStatement() {
+        Token keyword = consume(TokenType.PRINT, "Expected 'print'");
+        List<Expression> expressions = new ArrayList<>();
+        do {
+            expressions.add(parseExpression());
+        } while (match(TokenType.COMMA));
+
+        return new PrintStatementNode(Span.combine(keyword.getPosition(), previous().getPosition()), expressions);
+    }
+
+    public ReturnStatementNode parseReturnStatement() {
+        Token keyword = consume(TokenType.RETURN, "Expected 'return'");
+        if (isBodyEnd() || isOnNewLine()) {
+            return new ReturnStatementNode(keyword.getPosition(), null);
+        }
+        Expression value = parseExpression();
+
+        return new ReturnStatementNode(Span.combine(keyword.getPosition(), previous().getPosition()), value);
     }
 
     public Expression parsePrimary(){
