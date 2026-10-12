@@ -112,7 +112,7 @@ public class Scanner {
             case '[': addToken(TokenType.LBRACKET); break;
             case ']': addToken(TokenType.RBRACKET); break;
             case ',': addToken(TokenType.COMMA); break;
-            case '=': addToken(match('>') ? TokenType.ARROW : TokenType.EQUAL); break;
+            case '=': addToken(TokenType.EQUAL); break;
             case ';': addToken(TokenType.SEMICOLON); break;
 
             case ':': addToken(match('=') ? TokenType.ASSIGN : TokenType.COLON); break;

@@ -105,11 +105,10 @@ public class Parser {
         while (!isBodyEnd()) {
             if (check(TokenType.VAR) || check(TokenType.TYPE)) {
                 items.add(parseSimpleDeclaration());
-                consumeDeclarationSeparator();
             } else {
                 items.add(parseStatement());
-                consumeSeparator();
             }
+            consumeSeparator();
         }
 
         if (items.isEmpty()) return new BodyNode(start, items);
@@ -217,7 +216,13 @@ public class Parser {
         TypeNode returnType = match(TokenType.COLON) ? parseType() : null;
         BodyNode body = null;
         Expression expressionBody = null;
-        if (match(TokenType.ARROW)) {
+        if (match(TokenType.EQUAL)) {
+            Token equals = previous();
+            Token greater = consume(TokenType.GREATER, "Expected '=>' after routine header at " + peek().getPosition());
+            if (equals.getPosition().lineNum() != greater.getPosition().lineNum()
+                    || equals.getPosition().posEnd() + 1 != greater.getPosition().posBegin()) {
+                throw new ParseException("Expected adjacent '=' and '>' in '=>' at " + greater.getPosition());
+            }
             expressionBody = parseExpression();
         } else if (match(TokenType.IS)) {
             body = parseBody();
