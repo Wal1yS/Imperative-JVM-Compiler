@@ -87,17 +87,6 @@ public class Parser {
         throw new ParseException("Expected new line or ';' at " + peek().getPosition());
     }
 
-    private void consumeDeclarationSeparator() {
-        if (match(TokenType.SEMICOLON)) {
-            if (isBodyEnd()) {
-                throw new ParseException("Expected declaration or statement after ';' at " + previous().getPosition());
-            }
-            return;
-        }
-        if (isBodyEnd() || isOnNewLine()) return;
-        throw new ParseException("Expected new line or ';' at " + peek().getPosition());
-    }
-
     public BodyNode parseBody() {
         Span start = peek().getPosition();
         List<ASTNode> items = new ArrayList<>();
@@ -126,7 +115,7 @@ public class Parser {
         List<Declaration> declarations = new ArrayList<>();
         while (!isEnd()) {
             declarations.add(parseDeclaration());
-            consumeDeclarationSeparator();
+            consumeSeparator();
         }
         Span position = declarations.isEmpty() ? start : Span.combine(start, previous().getPosition());
         return new ProgramNode(position, declarations);
@@ -185,7 +174,7 @@ public class Parser {
             List<VariableDeclarationNode> fields = new ArrayList<>();
             while (!check(TokenType.END) && !isEnd()) {
                 fields.add(parseVariableDeclaration());
-                consumeDeclarationSeparator();
+                consumeSeparator();
             }
             Token end = consume(TokenType.END, "Expected 'end' after record at " + peek().getPosition());
             return new RecordTypeNode(Span.combine(start.getPosition(), end.getPosition()), fields);
