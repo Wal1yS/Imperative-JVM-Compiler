@@ -77,12 +77,11 @@ public class Parser {
     }
 
     private void consumeSeparator() {
-        if (match(TokenType.SEMICOLON)) {
-            if (isBodyEnd() || isOnNewLine()) {
-                throw new ParseException("Expected statement after ';' at " + previous().getPosition());
-            }
-            return;
+        boolean hasSemicolon = false;
+        while (match(TokenType.SEMICOLON)) {
+            hasSemicolon = true;
         }
+        if (hasSemicolon) return;
         if (isBodyEnd() || isOnNewLine()) return;
         throw new ParseException("Expected new line or ';' at " + peek().getPosition());
     }
@@ -162,7 +161,9 @@ public class Parser {
             Token start = previous();
             Expression size = null;
             if (match(TokenType.LBRACKET)) {
-                size = parseExpression();
+                if (!check(TokenType.RBRACKET)) {
+                    size = parseExpression();
+                }
                 consume(TokenType.RBRACKET, "Expected ']' after array size at " + peek().getPosition());
             }
             TypeNode elementType = parseType();
@@ -325,7 +326,7 @@ public class Parser {
 
     public ReturnStatementNode parseReturnStatement() {
         Token keyword = consume(TokenType.RETURN, "Expected 'return'");
-        if (isBodyEnd() || isOnNewLine()) {
+        if (check(TokenType.SEMICOLON) || isBodyEnd() || isOnNewLine()) {
             return new ReturnStatementNode(keyword.getPosition(), null);
         }
         Expression value = parseExpression();
@@ -405,12 +406,20 @@ public class Parser {
     }
 
     public Expression parseSummand() {
+        Expression expr;
         if (match(TokenType.LPAREN)) {
-            Expression expr = parseExpression();
+            expr = parseExpression();
             consume(TokenType.RPAREN, "Expected ')' after expression");
-            return expr;
+        } else {
+            expr = parsePrimary();
         }
-        return parsePrimary();
+
+        while (match(TokenType.AS)) {
+            TypeNode type = parseType();
+            expr = new CastExpressionNode(Span.combine(expr.getPosition(), type.getPosition()), expr, type);
+        }
+
+        return expr;
     }
 
     public Expression parseFactor() {

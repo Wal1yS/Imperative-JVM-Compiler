@@ -10,7 +10,7 @@ public class BodyNode extends ASTNode {
 
     public BodyNode(Span position, List<ASTNode> items) {
         super(position);
-        this.items = items;
+        this.items = List.copyOf(items);
     }
 
     public List<ASTNode> getItems() {

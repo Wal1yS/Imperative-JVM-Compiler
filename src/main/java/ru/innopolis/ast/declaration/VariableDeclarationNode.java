@@ -5,7 +5,6 @@ import ru.innopolis.lexer.Span;
 import ru.innopolis.ast.TypeNode;
 import ru.innopolis.ast.expression.Expression;
 
-/** Type is null for inference; initializer is null when only a type is declared. */
 public class VariableDeclarationNode extends Declaration {
     private final String name;
     private final TypeNode type;

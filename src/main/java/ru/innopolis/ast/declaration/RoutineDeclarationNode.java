@@ -7,7 +7,6 @@ import ru.innopolis.ast.expression.Expression;
 import ru.innopolis.ast.statement.BodyNode;
 import java.util.List;
 
-/** Forward declarations have no body. A null returnType denotes an omitted result type. */
 public class RoutineDeclarationNode extends Declaration {
     private final String name;
     private final List<ParameterNode> parameters;

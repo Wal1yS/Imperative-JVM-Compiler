@@ -11,7 +11,7 @@ public class PrintStatementNode extends Statement {
 
     public PrintStatementNode(Span position, List<Expression> expressions) {
         super(position);
-        this.expressions = expressions;
+        this.expressions = List.copyOf(expressions);
     }
 
     public List<Expression> getExpressions() {

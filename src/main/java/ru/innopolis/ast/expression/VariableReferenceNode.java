@@ -9,4 +9,8 @@ public class VariableReferenceNode extends Expression{
         super(position);
         this.name = name;
     }
+
+    public String getName() {
+        return name;
+    }
 }
