@@ -11,4 +11,12 @@ public class ArrayAccessNode extends Expression {
         this.array = array;
         this.index = index;
     }
+
+    public Expression getArray() {
+        return array;
+    }
+
+    public Expression getIndex() {
+        return index;
+    }
 }

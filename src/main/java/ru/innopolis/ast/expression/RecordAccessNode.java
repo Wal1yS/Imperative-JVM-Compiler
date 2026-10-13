@@ -11,4 +11,12 @@ public class RecordAccessNode extends Expression {
         this.record = record;
         this.fieldName = fieldName;
     }
+
+    public Expression getRecord() {
+        return record;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
 }

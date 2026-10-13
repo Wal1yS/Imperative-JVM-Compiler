@@ -1,6 +1,15 @@
 package ru.innopolis.parser;
 
+import ru.innopolis.ast.ASTNode;
+import ru.innopolis.ast.Declaration;
+import ru.innopolis.ast.Statement;
+import ru.innopolis.ast.ProgramNode;
+import ru.innopolis.ast.TypeNode;
+import ru.innopolis.ast.declaration.*;
+import ru.innopolis.ast.type.*;
 import ru.innopolis.ast.expression.*;
+import ru.innopolis.ast.statement.*;
+import ru.innopolis.lexer.Span;
 import ru.innopolis.lexer.token.*;
 import ru.innopolis.lexer.TokenType;
 
@@ -52,6 +61,277 @@ public class Parser {
     public Token consume(TokenType type, String errorMessage) {
         if (check(type)) return step();
         throw new ParseException(errorMessage);
+    }
+
+    private Token peekNext() {
+        if (current + 1 >= tokens.size()) return tokens.get(tokens.size() - 1);
+        return tokens.get(current + 1);
+    }
+
+    private boolean isBodyEnd() {
+        return isEnd() || check(TokenType.END) || check(TokenType.ELSE);
+    }
+
+    private boolean isOnNewLine() {
+        return peek().getPosition().lineNum() > previous().getPosition().lineNum();
+    }
+
+    private void consumeSeparator() {
+        boolean hasSemicolon = false;
+        while (match(TokenType.SEMICOLON)) {
+            hasSemicolon = true;
+        }
+        if (hasSemicolon) return;
+        if (isBodyEnd() || isOnNewLine()) return;
+        throw new ParseException("Expected new line or ';' at " + peek().getPosition());
+    }
+
+    public BodyNode parseBody() {
+        Span start = peek().getPosition();
+        List<ASTNode> items = new ArrayList<>();
+
+        while (!isBodyEnd()) {
+            if (check(TokenType.VAR) || check(TokenType.TYPE)) {
+                items.add(parseSimpleDeclaration());
+            } else {
+                items.add(parseStatement());
+            }
+            consumeSeparator();
+        }
+
+        if (items.isEmpty()) return new BodyNode(start, items);
+        return new BodyNode(Span.combine(start, previous().getPosition()), items);
+    }
+
+    public Declaration parseSimpleDeclaration() {
+        if (check(TokenType.VAR)) return parseVariableDeclaration();
+        if (check(TokenType.TYPE)) return parseTypeDeclaration();
+        throw new ParseException("Expected 'var' or 'type' at " + peek().getPosition());
+    }
+
+    public ProgramNode parseProgram() {
+        Span start = peek().getPosition();
+        List<Declaration> declarations = new ArrayList<>();
+        while (!isEnd()) {
+            declarations.add(parseDeclaration());
+            consumeSeparator();
+        }
+        Span position = declarations.isEmpty() ? start : Span.combine(start, previous().getPosition());
+        return new ProgramNode(position, declarations);
+    }
+
+    public Declaration parseDeclaration() {
+        if (check(TokenType.ROUTINE)) return parseRoutineDeclaration();
+        return parseSimpleDeclaration();
+    }
+
+    public VariableDeclarationNode parseVariableDeclaration() {
+        Token start = consume(TokenType.VAR, "Expected 'var' at " + peek().getPosition());
+        IdentifierToken name = (IdentifierToken) consume(TokenType.IDENTIFIER,
+                "Expected variable name at " + peek().getPosition());
+        TypeNode type = match(TokenType.COLON) ? parseType() : null;
+        Expression initializer = match(TokenType.IS) ? parseExpression() : null;
+        if (type == null && initializer == null) {
+            throw new ParseException("Expected variable type or initializer at " + peek().getPosition());
+        }
+        return new VariableDeclarationNode(Span.combine(start.getPosition(), previous().getPosition()),
+                name.getName(), type, initializer);
+    }
+
+    public TypeDeclarationNode parseTypeDeclaration() {
+        Token start = consume(TokenType.TYPE, "Expected 'type' at " + peek().getPosition());
+        IdentifierToken name = (IdentifierToken) consume(TokenType.IDENTIFIER,
+                "Expected type name at " + peek().getPosition());
+        consume(TokenType.IS, "Expected 'is' after type name at " + peek().getPosition());
+        TypeNode type = parseType();
+        return new TypeDeclarationNode(Span.combine(start.getPosition(), previous().getPosition()),
+                name.getName(), type);
+    }
+
+    public TypeNode parseType() {
+        if (match(TokenType.INTEGER, TokenType.REAL, TokenType.BOOLEAN, TokenType.STRING)) {
+            Token token = previous();
+            return new PrimitiveTypeNode(token.getPosition(), token.getType());
+        }
+        if (match(TokenType.IDENTIFIER)) {
+            IdentifierToken token = (IdentifierToken) previous();
+            return new NamedTypeNode(token.getPosition(), token.getName());
+        }
+        if (match(TokenType.ARRAY)) {
+            Token start = previous();
+            Expression size = null;
+            if (match(TokenType.LBRACKET)) {
+                if (!check(TokenType.RBRACKET)) {
+                    size = parseExpression();
+                }
+                consume(TokenType.RBRACKET, "Expected ']' after array size at " + peek().getPosition());
+            }
+            TypeNode elementType = parseType();
+            return new ArrayTypeNode(Span.combine(start.getPosition(), previous().getPosition()),
+                    size, elementType);
+        }
+        if (match(TokenType.RECORD)) {
+            Token start = previous();
+            List<VariableDeclarationNode> fields = new ArrayList<>();
+            while (!check(TokenType.END) && !isEnd()) {
+                fields.add(parseVariableDeclaration());
+                consumeSeparator();
+            }
+            Token end = consume(TokenType.END, "Expected 'end' after record at " + peek().getPosition());
+            return new RecordTypeNode(Span.combine(start.getPosition(), end.getPosition()), fields);
+        }
+        throw new ParseException("Expected type at " + peek().getPosition());
+    }
+
+    public ParameterNode parseParameter() {
+        IdentifierToken name = (IdentifierToken) consume(TokenType.IDENTIFIER,
+                "Expected parameter name at " + peek().getPosition());
+        consume(TokenType.COLON, "Expected ':' after parameter name at " + peek().getPosition());
+        TypeNode type = parseType();
+        return new ParameterNode(Span.combine(name.getPosition(), previous().getPosition()), name.getName(), type);
+    }
+
+    public RoutineDeclarationNode parseRoutineDeclaration() {
+        Token start = consume(TokenType.ROUTINE, "Expected 'routine' at " + peek().getPosition());
+        IdentifierToken name = (IdentifierToken) consume(TokenType.IDENTIFIER,
+                "Expected routine name at " + peek().getPosition());
+        consume(TokenType.LPAREN, "Expected '(' after routine name at " + peek().getPosition());
+        List<ParameterNode> parameters = new ArrayList<>();
+        if (!check(TokenType.RPAREN)) {
+            do {
+                parameters.add(parseParameter());
+            } while (match(TokenType.COMMA));
+        }
+        consume(TokenType.RPAREN, "Expected ')' after parameters at " + peek().getPosition());
+        TypeNode returnType = match(TokenType.COLON) ? parseType() : null;
+        BodyNode body = null;
+        Expression expressionBody = null;
+        if (match(TokenType.EQUAL)) {
+            Token equals = previous();
+            Token greater = consume(TokenType.GREATER, "Expected '=>' after routine header at " + peek().getPosition());
+            if (equals.getPosition().lineNum() != greater.getPosition().lineNum()
+                    || equals.getPosition().posEnd() + 1 != greater.getPosition().posBegin()) {
+                throw new ParseException("Expected adjacent '=' and '>' in '=>' at " + greater.getPosition());
+            }
+            expressionBody = parseExpression();
+        } else if (match(TokenType.IS)) {
+            body = parseBody();
+            consume(TokenType.END, "Expected 'end' after routine body at " + peek().getPosition());
+        }
+        return new RoutineDeclarationNode(Span.combine(start.getPosition(), previous().getPosition()),
+                name.getName(), parameters, returnType, body, expressionBody);
+    }
+
+    public Statement parseStatement() {
+        switch (peek().getType()) {
+            case IF: return parseIfStatement();
+            case WHILE: return parseWhileLoop();
+            case FOR: return parseForLoop();
+            case PRINT: return parsePrintStatement();
+            case RETURN: return parseReturnStatement();
+            case IDENTIFIER:
+                TokenType next = peekNext().getType();
+                if (next == TokenType.ASSIGN || next == TokenType.DOT || next == TokenType.LBRACKET) {
+                    return parseAssignment();
+                }
+                return parseRoutineCallStatement();
+            default:
+                throw new ParseException("Expected statement at " + peek().getPosition());
+        }
+    }
+
+    public AssignmentNode parseAssignment() {
+        if (!check(TokenType.IDENTIFIER)) {
+            throw new ParseException("Expected variable name at " + peek().getPosition());
+        }
+        Expression target = parsePrimary();
+        consume(TokenType.ASSIGN, "Expected ':=' after assignment target");
+        Expression value = parseExpression();
+
+        return new AssignmentNode(target, value);
+    }
+
+    public RoutineCallStatementNode parseRoutineCallStatement() {
+        if (!check(TokenType.IDENTIFIER)) {
+            throw new ParseException("Expected routine name at " + peek().getPosition());
+        }
+        if (peekNext().getType() == TokenType.LPAREN) {
+            return new RoutineCallStatementNode((RoutineCallExpressionNode) parsePrimary());
+        }
+
+        IdentifierToken token = (IdentifierToken) step();
+        return new RoutineCallStatementNode(
+                new RoutineCallExpressionNode(token.getPosition(), token.getName(), new ArrayList<>()));
+    }
+
+    public IfStatementNode parseIfStatement() {
+        Token keyword = consume(TokenType.IF, "Expected 'if'");
+        Expression condition = parseExpression();
+        consume(TokenType.THEN, "Expected 'then' after if condition");
+        BodyNode thenBody = parseBody();
+
+        BodyNode elseBody = null;
+        if (match(TokenType.ELSE)) {
+            elseBody = parseBody();
+        }
+        Token end = consume(TokenType.END, "Expected 'end' after if statement");
+
+        return new IfStatementNode(Span.combine(keyword.getPosition(), end.getPosition()),
+                condition, thenBody, elseBody);
+    }
+
+    public WhileLoopNode parseWhileLoop() {
+        Token keyword = consume(TokenType.WHILE, "Expected 'while'");
+        Expression condition = parseExpression();
+        consume(TokenType.LOOP, "Expected 'loop' after while condition");
+        BodyNode body = parseBody();
+        Token end = consume(TokenType.END, "Expected 'end' after while loop");
+
+        return new WhileLoopNode(Span.combine(keyword.getPosition(), end.getPosition()), condition, body);
+    }
+
+    public ForLoopNode parseForLoop() {
+        Token keyword = consume(TokenType.FOR, "Expected 'for'");
+        Token variable = consume(TokenType.IDENTIFIER, "Expected loop variable name after 'for'");
+        consume(TokenType.IN, "Expected 'in' after loop variable");
+        RangeNode range = parseRange();
+        boolean reverse = match(TokenType.REVERSE);
+        consume(TokenType.LOOP, "Expected 'loop' after for range");
+        BodyNode body = parseBody();
+        Token end = consume(TokenType.END, "Expected 'end' after for loop");
+
+        return new ForLoopNode(Span.combine(keyword.getPosition(), end.getPosition()),
+                ((IdentifierToken) variable).getName(), range, reverse, body);
+    }
+
+    public RangeNode parseRange() {
+        Expression start = parseExpression();
+        Expression end = null;
+        if (match(TokenType.DOT_DOT)) {
+            end = parseExpression();
+        }
+
+        return new RangeNode(start, end);
+    }
+
+    public PrintStatementNode parsePrintStatement() {
+        Token keyword = consume(TokenType.PRINT, "Expected 'print'");
+        List<Expression> expressions = new ArrayList<>();
+        do {
+            expressions.add(parseExpression());
+        } while (match(TokenType.COMMA));
+
+        return new PrintStatementNode(Span.combine(keyword.getPosition(), previous().getPosition()), expressions);
+    }
+
+    public ReturnStatementNode parseReturnStatement() {
+        Token keyword = consume(TokenType.RETURN, "Expected 'return'");
+        if (check(TokenType.SEMICOLON) || isBodyEnd() || isOnNewLine()) {
+            return new ReturnStatementNode(keyword.getPosition(), null);
+        }
+        Expression value = parseExpression();
+
+        return new ReturnStatementNode(Span.combine(keyword.getPosition(), previous().getPosition()), value);
     }
 
     public Expression parsePrimary(){
@@ -126,12 +406,20 @@ public class Parser {
     }
 
     public Expression parseSummand() {
+        Expression expr;
         if (match(TokenType.LPAREN)) {
-            Expression expr = parseExpression();
+            expr = parseExpression();
             consume(TokenType.RPAREN, "Expected ')' after expression");
-            return expr;
+        } else {
+            expr = parsePrimary();
         }
-        return parsePrimary();
+
+        while (match(TokenType.AS)) {
+            TypeNode type = parseType();
+            expr = new CastExpressionNode(Span.combine(expr.getPosition(), type.getPosition()), expr, type);
+        }
+
+        return expr;
     }
 
     public Expression parseFactor() {

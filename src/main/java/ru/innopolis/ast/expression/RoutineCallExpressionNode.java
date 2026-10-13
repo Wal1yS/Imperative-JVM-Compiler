@@ -11,6 +11,14 @@ public class RoutineCallExpressionNode extends Expression{
     public RoutineCallExpressionNode(Span position, String routineName, List<Expression> arguments){
         super(position);
         this.routineName = routineName;
-        this.arguments = arguments;
+        this.arguments = List.copyOf(arguments);
+    }
+
+    public String getRoutineName() {
+        return routineName;
+    }
+
+    public List<Expression> getArguments() {
+        return arguments;
     }
 }
