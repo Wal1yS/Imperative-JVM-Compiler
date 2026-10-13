@@ -139,6 +139,10 @@ public class ASTPrinter {
             if (r.getExpressionBody() != null) children.add(r.getExpressionBody());
         } else if (node instanceof VariableDeclarationNode v) {
             if (v.getInitializer() != null) children.add(v.getInitializer());
+        } else if (node instanceof TypeDeclarationNode t) {
+            if (t.getType() instanceof RecordTypeNode rec) {
+                children.addAll(rec.getFields());
+            }
         } else if (node instanceof BodyNode b) {
             children.addAll(b.getItems());
         } else if (node instanceof AssignmentNode a) {
