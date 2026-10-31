@@ -1,6 +1,7 @@
 package ru.innopolis.ast;
 
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 import java.util.List;
 
 public class ProgramNode extends ASTNode {
@@ -14,5 +15,9 @@ public class ProgramNode extends ASTNode {
     public List<Declaration> getDeclarations() {
         return declarations;
     }
-}
 
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
+    }
+}

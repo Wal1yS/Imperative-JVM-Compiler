@@ -4,6 +4,7 @@ import ru.innopolis.ast.Declaration;
 import ru.innopolis.lexer.Span;
 import ru.innopolis.ast.TypeNode;
 import ru.innopolis.ast.expression.Expression;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public class VariableDeclarationNode extends Declaration {
     private final String name;
@@ -28,5 +29,9 @@ public class VariableDeclarationNode extends Declaration {
     public Expression getInitializer() {
         return initializer;
     }
-}
 
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
+    }
+}

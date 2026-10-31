@@ -3,6 +3,7 @@ package ru.innopolis.ast.type;
 import ru.innopolis.ast.TypeNode;
 import ru.innopolis.lexer.Span;
 import ru.innopolis.ast.expression.Expression;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 /** A null size represents an array whose length is not specified in the type. */
 public class ArrayTypeNode extends TypeNode {
@@ -22,5 +23,9 @@ public class ArrayTypeNode extends TypeNode {
     public TypeNode getElementType() {
         return elementType;
     }
-}
 
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
+    }
+}

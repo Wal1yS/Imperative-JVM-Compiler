@@ -1,6 +1,7 @@
 package ru.innopolis.ast;
 
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public abstract class ASTNode {
     private final Span position;
@@ -12,4 +13,6 @@ public abstract class ASTNode {
     public Span getPosition(){
         return position;
     }
+
+    public abstract <R, C> R accept(ASTVisitor<R, C> visitor, C context);
 }

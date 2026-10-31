@@ -3,6 +3,7 @@ package ru.innopolis.ast.statement;
 import ru.innopolis.ast.ASTNode;
 import ru.innopolis.ast.expression.Expression;
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public class RangeNode extends ASTNode {
     private final Expression start;
@@ -24,5 +25,10 @@ public class RangeNode extends ASTNode {
 
     public boolean isArrayIteration() {
         return end == null;
+    }
+
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
     }
 }

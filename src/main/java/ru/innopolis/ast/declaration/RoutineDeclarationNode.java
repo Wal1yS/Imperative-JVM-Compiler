@@ -5,6 +5,7 @@ import ru.innopolis.lexer.Span;
 import ru.innopolis.ast.TypeNode;
 import ru.innopolis.ast.expression.Expression;
 import ru.innopolis.ast.statement.BodyNode;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 import java.util.List;
 
 public class RoutineDeclarationNode extends Declaration {
@@ -46,5 +47,9 @@ public class RoutineDeclarationNode extends Declaration {
     public boolean isForwardDeclaration() {
         return body == null && expressionBody == null;
     }
-}
 
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
+    }
+}

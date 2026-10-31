@@ -2,6 +2,7 @@ package ru.innopolis.ast.statement;
 
 import ru.innopolis.ast.Statement;
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public class ForLoopNode extends Statement {
     private final String variableName;
@@ -31,5 +32,10 @@ public class ForLoopNode extends Statement {
 
     public BodyNode getBody() {
         return body;
+    }
+
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
     }
 }

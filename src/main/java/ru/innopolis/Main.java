@@ -5,6 +5,9 @@ import ru.innopolis.ast.ProgramNode;
 import ru.innopolis.lexer.Scanner;
 import ru.innopolis.lexer.token.Token;
 import ru.innopolis.parser.Parser;
+import ru.innopolis.semantic.AnalysisResult;
+import ru.innopolis.semantic.SemanticAnalyzer;
+import ru.innopolis.semantic.context.SemanticError;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -14,7 +17,7 @@ import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
-        String filePath = "examples/2.txt";
+        String filePath = (args != null && args.length > 0) ? args[0] : "examples/13.txt";
 
         try {
             Path inputPath = Path.of(filePath);
@@ -34,7 +37,19 @@ public class Main {
             System.out.println("--- AST TREE ---");
             System.out.println(astString);
 
-            // 3. Write outputs
+            // 3. Semantic Analysis (Pass 1)
+            System.out.println("--- SEMANTIC ANALYSIS ---");
+            AnalysisResult result = SemanticAnalyzer.analyze(program);
+            if (!result.isSuccess()) {
+                System.err.println("Found " + result.getErrors().size() + " semantic error(s):");
+                for (SemanticError error : result.getErrors()) {
+                    System.err.println("  " + error);
+                }
+                return;
+            }
+            System.out.println("Semantic checks passed successfully!");
+
+            // 4. Write outputs
             Path outputDir = Path.of("output");
             if (!Files.exists(outputDir)) {
                 Files.createDirectories(outputDir);
@@ -52,6 +67,8 @@ public class Main {
                 }
                 writer.println("\n--- AST ---");
                 writer.println(astString);
+                writer.println("\n--- SEMANTIC STATUS ---");
+                writer.println("Pass 1: Scope & Declarations OK");
             }
 
             System.out.println("Готово! Токены и AST успешно сохранены в файл: " + outputPath);
@@ -59,7 +76,7 @@ public class Main {
         } catch (IOException e) {
             System.err.println("Ошибка ввода/вывода: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("Ошибка синтаксического анализа: " + e.getMessage());
+            System.err.println("Ошибка анализа: " + e.getMessage());
         }
     }
 }

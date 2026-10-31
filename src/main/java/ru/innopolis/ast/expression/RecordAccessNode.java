@@ -1,6 +1,7 @@
 package ru.innopolis.ast.expression;
 
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public class RecordAccessNode extends Expression {
     private final Expression record;
@@ -18,5 +19,10 @@ public class RecordAccessNode extends Expression {
 
     public String getFieldName() {
         return fieldName;
+    }
+
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
     }
 }

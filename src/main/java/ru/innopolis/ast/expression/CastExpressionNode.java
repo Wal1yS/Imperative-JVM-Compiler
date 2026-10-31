@@ -2,6 +2,7 @@ package ru.innopolis.ast.expression;
 
 import ru.innopolis.ast.TypeNode;
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 public class CastExpressionNode extends Expression {
     private final Expression expression;
@@ -19,5 +20,10 @@ public class CastExpressionNode extends Expression {
 
     public TypeNode getTargetType() {
         return targetType;
+    }
+
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
     }
 }

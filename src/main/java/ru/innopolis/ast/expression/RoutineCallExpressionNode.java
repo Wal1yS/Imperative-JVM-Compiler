@@ -1,6 +1,7 @@
 package ru.innopolis.ast.expression;
 
 import ru.innopolis.lexer.Span;
+import ru.innopolis.semantic.visitor.ASTVisitor;
 
 import java.util.List;
 
@@ -20,5 +21,10 @@ public class RoutineCallExpressionNode extends Expression{
 
     public List<Expression> getArguments() {
         return arguments;
+    }
+
+    @Override
+    public <R, C> R accept(ASTVisitor<R, C> visitor, C context) {
+        return visitor.visit(this, context);
     }
 }
