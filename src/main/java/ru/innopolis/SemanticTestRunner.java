@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 public class SemanticTestRunner {
+    private static int failures = 0;
 
     public static void main(String[] args) {
         System.out.println("==================================================");
@@ -106,9 +107,152 @@ public class SemanticTestRunner {
         testExpectSuccess("Local type declaration",
                 "routine main() is type T is integer\n var a: T is 1\n print a end");
 
+        runTypeCheckerTests();
+        runArrayBoundsTests();
+
+        int totalFailures = failed + failures;
         System.out.println("\n==================================================");
-        System.out.println("   ALL TESTS COMPLETED SUCCESSFULLY!              ");
+        if (totalFailures == 0) {
+            System.out.println("   ALL TESTS COMPLETED SUCCESSFULLY!              ");
+        } else {
+            System.out.println("   " + totalFailures + " TEST(S) FAILED");
+        }
         System.out.println("==================================================");
+    }
+
+    private static final String MAIN = "\nroutine main() is end";
+    private static final String POINT = "type P is record var x: integer end\n";
+
+    // Person 2: Type Checker (Curator Check 3, Vitebsk Checks 1, 3, 4, 5, 8, 9, 10)
+    private static void runTypeCheckerTests() {
+        System.out.println("\n--- 4. Testing Person 2 Type Checks ---");
+
+        // Positive cases
+        testExpectSuccess("integer widens to real",
+                "routine main() is var r: real is 5\n r := r + 1\n print r / 2 end");
+        testExpectSuccess("for over array takes element type",
+                "routine main() is var a: array [3] integer\n for v in a loop var w: integer is v\n print w end end");
+        testExpectSuccess("Forward declaration with matching signature",
+                "routine f(x: integer): integer\n routine main() is print f(1) end\n routine f(x: integer): integer is return x end");
+        testExpectSuccess("Function call as a statement discards the result",
+                "routine f(): integer is return 1 end\n routine main() is f() end");
+        testExpectSuccess("Return on both if/else branches",
+                "routine f(x: integer): integer is if x > 0 then return 1 else return 0 end end" + MAIN);
+        testExpectSuccess("Valid casts",
+                "routine main() is var a is true as real\n var b is 1 as boolean\n var c is 2.7 as integer\n print a, b, c end");
+
+        // Vitebsk Check 3: no implicit casts
+        testExpectError("boolean initializer for integer",
+                "routine main() is var r: integer is true end", "Cannot initialize variable 'r' of type integer");
+        testExpectError("integer initializer for boolean",
+                "routine main() is var b: boolean is 1 end", "Cannot initialize variable 'b' of type boolean");
+        testExpectError("real assigned to integer",
+                "routine main() is var i: integer is 1\n i := 2.5 end", "cannot assign real to integer");
+        testExpectError("boolean in arithmetic",
+                "routine main() is print true + 1 end", "Operator '+' cannot be applied to boolean and integer");
+        testExpectError("% on real",
+                "routine main() is print 5.0 % 2 end", "Operator '%' cannot be applied to real and integer");
+        testExpectError("Records are compared by name",
+                "type A is record var x: integer end\n type B is record var x: integer end\n"
+                        + "routine main() is var a: A\n var b: B\n a := b end", "cannot assign B to A");
+
+        // Vitebsk Check 5: string rules
+        testExpectError("string plus integer",
+                "routine main() is print 1 + \"a\" end", "Operator '+' cannot be applied to integer and string");
+        testExpectError("string multiplication",
+                "routine main() is var s: string is \"a\"\n print s * s end", "Operator '*' cannot be applied to string and string");
+
+        // Vitebsk Check 4: explicit casts
+        testExpectError("real as boolean",
+                "routine main() is var x is 3.5 as boolean end", "Cannot convert real to boolean");
+        testExpectError("record as integer",
+                POINT + "routine main() is var p: P\n var n is p as integer end", "Cannot convert P to integer");
+        testExpectError("cast to a non-primitive type",
+                "routine main() is var b is 1 as array integer end", "'as' converts only to primitive types");
+
+        // Vitebsk Check 10: array members
+        testExpectError("unknown array member",
+                "routine main() is var a: array [3] integer\n print a.foo end", "Arrays have no member 'foo'");
+        testExpectError("assignment to .size",
+                "routine main() is var a: array [3] integer\n a.size := 5 end", "read-only property 'size'");
+        testExpectError("unknown record field",
+                POINT + "routine main() is var p: P\n print p.y end", "has no field 'y'");
+        testExpectError("member of a primitive",
+                "routine main() is var n is 1\n print n.x end", "Cannot access member 'x' of a value of type integer");
+
+        // Arrays
+        testExpectError("real index",
+                "routine main() is var a: array [3] integer\n print a[1.5] end", "Array index must be integer, got real");
+        testExpectError("indexing a non-array",
+                "routine main() is var n is 1\n print n[0] end", "it is not an array");
+        testExpectError("sizeless array variable",
+                "routine main() is var a: array integer end", "needs an array size");
+        testExpectError("non-positive array size",
+                "routine main() is var a: array [0] integer end", "Array size must be positive");
+        testExpectError("non-integer array size",
+                "routine main() is var a: array [2.5] integer end", "Array size must be integer");
+
+        // Vitebsk Check 1: return gap
+        testExpectError("value returned from a procedure",
+                "routine p() is return 1 end" + MAIN, "has no return type and cannot return a value");
+        testExpectError("empty return in a function",
+                "routine f(): integer is return\n end" + MAIN, "must return a value of type integer");
+        testExpectError("return type mismatch",
+                "routine f(): integer is return true end" + MAIN, "expected integer, got boolean");
+        testExpectError("missing return on some path",
+                "routine f(x: integer): integer is if x > 0 then return 1 end end" + MAIN, "on every path");
+        testExpectError("expression body type mismatch",
+                "routine f(x: integer): boolean => x + 1" + MAIN, "expression body has type integer");
+
+        // Curator Check 3: calls
+        testExpectError("wrong argument count",
+                "routine f(a: integer, b: integer): integer is return a + b end\n routine main() is print f(1) end",
+                "expects 2 argument(s), but 1 were given");
+        testExpectError("wrong argument type",
+                "routine f(a: integer, b: integer): integer is return a + b end\n routine main() is print f(1, true) end",
+                "Argument 2 of routine 'f': cannot pass boolean as integer");
+        testExpectError("procedure call used as a value",
+                "routine p() is print 1 end\n routine main() is var x is p() end", "cannot be used as a value");
+        testExpectError("routine used as a variable",
+                "routine f(): integer is return 1 end\n routine main() is print f end", "'f' is a routine, not a variable");
+
+        // Conditions and loops (Vitebsk Check 9)
+        testExpectError("integer if condition",
+                "routine main() is if 1 then print 1 end end", "Condition of 'if' must be boolean, got integer");
+        testExpectError("integer while condition",
+                "routine main() is while 0 loop print 1 end end", "Condition of 'while' must be boolean");
+        testExpectError("real range bound",
+                "routine main() is for i in 0 .. 2.5 loop print i end end", "Range bounds of 'for' must be integer, got real");
+        testExpectError("for-in over a non-array",
+                "routine main() is for v in 5 loop print v end end", "requires an array, got integer");
+        testExpectError("print a record",
+                POINT + "routine main() is var p: P\n print p end", "Cannot print a value of type P");
+
+        // Types and forward declarations (Vitebsk Check 8)
+        testExpectError("forward declaration signature mismatch",
+                "routine f(x: integer): integer\n routine f(x: real): integer is return 1 end" + MAIN,
+                "forward declaration says integer");
+        testExpectError("recursive record type",
+                "type N is record var next: N end" + MAIN, "Recursive type definition 'N'");
+    }
+
+    // Person 2: Array Bounds Checker (Curator Check 4, Vitebsk Check 6)
+    private static void runArrayBoundsTests() {
+        System.out.println("\n--- 5. Testing Person 2 Array Bounds Checks ---");
+        String arr = "routine main() is var a: array [10] integer\n";
+
+        testExpectSuccess("in-bounds loop over 0 .. 9", arr + "for i in 0 .. 9 loop a[i] := i end end");
+        testExpectSuccess("index guarded by if", arr + "for i in 0 .. 9 loop if i > 0 then a[i - 1] := i end end end");
+        testExpectSuccess("run-time index is not checked", arr + "var k is 20\n a[k] := 1 end");
+
+        testExpectError("constant index equal to size", arr + "a[10] := 1 end", "index is 10, array size is 10");
+        testExpectError("negative constant index", arr + "a[-1] := 1 end", "index is -1");
+        testExpectError("constant expression index",
+                "type Arr is array [5] integer\n routine main() is var a: Arr\n print a[2 + 3] end", "index is 5, array size is 5");
+        testExpectError("1-based loop on a 0-based array", arr + "for i in 1 .. 10 loop a[i] := i end end",
+                "index takes values 1..10, array size is 10");
+        testExpectError("loop variable plus offset", arr + "for i in 0 .. 9 loop print a[i + 1] end end",
+                "index takes values 1..10");
     }
 
     private static void testReturnOutsideRoutineDirect() {
@@ -122,6 +266,7 @@ public class SemanticTestRunner {
             System.out.println("[PASS] Return outside routine correctly caught: " + context.getErrors().get(0).getMessage());
         } else {
             System.err.println("[FAIL] Return outside routine did not catch error!");
+            failures++;
         }
     }
 
@@ -143,13 +288,16 @@ public class SemanticTestRunner {
                     System.out.println("[PASS] " + testName + " correctly caught: " + result.getErrors().get(0).getMessage());
                 } else {
                     System.err.println("[FAIL] " + testName + " did not contain expected message substring: " + expectedErrorMessageSubstring);
+                    failures++;
                     for (SemanticError e : result.getErrors()) System.err.println("       Actual: " + e);
                 }
             } else {
                 System.err.println("[FAIL] " + testName + " unexpectedly succeeded with no errors!");
+                failures++;
             }
         } catch (Exception e) {
             System.err.println("[FAIL] " + testName + " threw parser/scanner exception: " + e.getMessage());
+            failures++;
         }
     }
 
@@ -160,10 +308,12 @@ public class SemanticTestRunner {
                 System.out.println("[PASS] " + testName + " succeeded as expected.");
             } else {
                 System.err.println("[FAIL] " + testName + " failed with errors:");
+                failures++;
                 for (SemanticError e : result.getErrors()) System.err.println("       " + e);
             }
         } catch (Exception e) {
             System.err.println("[FAIL] " + testName + " threw exception: " + e.getMessage());
+            failures++;
         }
     }
 }

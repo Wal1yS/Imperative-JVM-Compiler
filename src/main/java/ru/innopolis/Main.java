@@ -37,7 +37,7 @@ public class Main {
             System.out.println("--- AST TREE ---");
             System.out.println(astString);
 
-            // 3. Semantic Analysis (Pass 1)
+            // 3. Semantic Analysis (scopes, types, array bounds)
             System.out.println("--- SEMANTIC ANALYSIS ---");
             AnalysisResult result = SemanticAnalyzer.analyze(program);
             if (!result.isSuccess()) {
@@ -69,6 +69,8 @@ public class Main {
                 writer.println(astString);
                 writer.println("\n--- SEMANTIC STATUS ---");
                 writer.println("Pass 1: Scope & Declarations OK");
+                writer.println("Pass 2: Types OK");
+                writer.println("Pass 3: Array Bounds OK");
             }
 
             System.out.println("Готово! Токены и AST успешно сохранены в файл: " + outputPath);
