@@ -92,7 +92,6 @@ public class SemanticTestRunner {
         testExpectSuccess("Shadowing in nested block",
                 "routine main() is var a is 1\n if true then var a is 2\n print a end\n print a end");
 
-        // Regression tests for Pass 1 scope fixes
         System.out.println("\n--- 3. Testing Pass 1 Scope Fixes ---");
         testExpectSuccess("Two records with the same field name",
                 "type P is record var x: integer end\n type V is record var x: real end\n routine main() is end");
@@ -123,13 +122,11 @@ public class SemanticTestRunner {
     private static final String MAIN = "\nroutine main() is end";
     private static final String POINT = "type P is record var x: integer end\n";
 
-    // Person 2: Type Checker (Curator Check 3, Vitebsk Checks 1, 3, 4, 5, 8, 9, 10)
     private static void runTypeCheckerTests() {
         System.out.println("\n--- 4. Testing Person 2 Type Checks ---");
 
-        // Positive cases
-        testExpectSuccess("integer widens to real",
-                "routine main() is var r: real is 5\n r := r + 1\n print r / 2 end");
+        testExpectSuccess("integer converted to real with 'as'",
+                "routine main() is var r: real is 5 as real\n r := r + (1 as real)\n print r / 2.0 end");
         testExpectSuccess("for over array takes element type",
                 "routine main() is var a: array [3] integer\n for v in a loop var w: integer is v\n print w end end");
         testExpectSuccess("Forward declaration with matching signature",
@@ -141,13 +138,26 @@ public class SemanticTestRunner {
         testExpectSuccess("Valid casts",
                 "routine main() is var a is true as real\n var b is 1 as boolean\n var c is 2.7 as integer\n print a, b, c end");
 
-        // Vitebsk Check 3: no implicit casts
         testExpectError("boolean initializer for integer",
                 "routine main() is var r: integer is true end", "Cannot initialize variable 'r' of type integer");
         testExpectError("integer initializer for boolean",
                 "routine main() is var b: boolean is 1 end", "Cannot initialize variable 'b' of type boolean");
         testExpectError("real assigned to integer",
                 "routine main() is var i: integer is 1\n i := 2.5 end", "cannot assign real to integer");
+        testExpectError("integer initializer for real",
+                "routine main() is var r: real is 5 end", "Cannot initialize variable 'r' of type real with a value of type integer");
+        testExpectError("integer assigned to real",
+                "routine main() is var r: real is 1.0\n r := 1 end", "cannot assign integer to real");
+        testExpectError("real plus integer",
+                "routine main() is print 1.5 + 1 end", "Operator '+' cannot be applied to real and integer");
+        testExpectError("integer compared with real",
+                "routine main() is print 1 < 2.5 end", "Operator '<' cannot be applied to integer and real");
+        testExpectError("integer equals real",
+                "routine main() is print 1 = 1.0 end", "Operator '=' cannot be applied to integer and real");
+        testExpectError("integer argument for real parameter",
+                "routine f(x: real): real is return x end\n routine main() is print f(1) end", "cannot pass integer as real");
+        testExpectError("integer returned from real function",
+                "routine f(): real is return 1 end" + MAIN, "expected real, got integer");
         testExpectError("boolean in arithmetic",
                 "routine main() is print true + 1 end", "Operator '+' cannot be applied to boolean and integer");
         testExpectError("% on real",
@@ -156,13 +166,11 @@ public class SemanticTestRunner {
                 "type A is record var x: integer end\n type B is record var x: integer end\n"
                         + "routine main() is var a: A\n var b: B\n a := b end", "cannot assign B to A");
 
-        // Vitebsk Check 5: string rules
         testExpectError("string plus integer",
                 "routine main() is print 1 + \"a\" end", "Operator '+' cannot be applied to integer and string");
         testExpectError("string multiplication",
                 "routine main() is var s: string is \"a\"\n print s * s end", "Operator '*' cannot be applied to string and string");
 
-        // Vitebsk Check 4: explicit casts
         testExpectError("real as boolean",
                 "routine main() is var x is 3.5 as boolean end", "Cannot convert real to boolean");
         testExpectError("record as integer",
@@ -170,7 +178,6 @@ public class SemanticTestRunner {
         testExpectError("cast to a non-primitive type",
                 "routine main() is var b is 1 as array integer end", "'as' converts only to primitive types");
 
-        // Vitebsk Check 10: array members
         testExpectError("unknown array member",
                 "routine main() is var a: array [3] integer\n print a.foo end", "Arrays have no member 'foo'");
         testExpectError("assignment to .size",
@@ -180,7 +187,6 @@ public class SemanticTestRunner {
         testExpectError("member of a primitive",
                 "routine main() is var n is 1\n print n.x end", "Cannot access member 'x' of a value of type integer");
 
-        // Arrays
         testExpectError("real index",
                 "routine main() is var a: array [3] integer\n print a[1.5] end", "Array index must be integer, got real");
         testExpectError("indexing a non-array",
@@ -192,7 +198,6 @@ public class SemanticTestRunner {
         testExpectError("non-integer array size",
                 "routine main() is var a: array [2.5] integer end", "Array size must be integer");
 
-        // Vitebsk Check 1: return gap
         testExpectError("value returned from a procedure",
                 "routine p() is return 1 end" + MAIN, "has no return type and cannot return a value");
         testExpectError("empty return in a function",
@@ -204,7 +209,6 @@ public class SemanticTestRunner {
         testExpectError("expression body type mismatch",
                 "routine f(x: integer): boolean => x + 1" + MAIN, "expression body has type integer");
 
-        // Curator Check 3: calls
         testExpectError("wrong argument count",
                 "routine f(a: integer, b: integer): integer is return a + b end\n routine main() is print f(1) end",
                 "expects 2 argument(s), but 1 were given");
@@ -216,7 +220,6 @@ public class SemanticTestRunner {
         testExpectError("routine used as a variable",
                 "routine f(): integer is return 1 end\n routine main() is print f end", "'f' is a routine, not a variable");
 
-        // Conditions and loops (Vitebsk Check 9)
         testExpectError("integer if condition",
                 "routine main() is if 1 then print 1 end end", "Condition of 'if' must be boolean, got integer");
         testExpectError("integer while condition",
@@ -228,7 +231,6 @@ public class SemanticTestRunner {
         testExpectError("print a record",
                 POINT + "routine main() is var p: P\n print p end", "Cannot print a value of type P");
 
-        // Types and forward declarations (Vitebsk Check 8)
         testExpectError("forward declaration signature mismatch",
                 "routine f(x: integer): integer\n routine f(x: real): integer is return 1 end" + MAIN,
                 "forward declaration says integer");
@@ -236,7 +238,6 @@ public class SemanticTestRunner {
                 "type N is record var next: N end" + MAIN, "Recursive type definition 'N'");
     }
 
-    // Person 2: Array Bounds Checker (Curator Check 4, Vitebsk Check 6)
     private static void runArrayBoundsTests() {
         System.out.println("\n--- 5. Testing Person 2 Array Bounds Checks ---");
         String arr = "routine main() is var a: array [10] integer\n";

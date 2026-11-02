@@ -3,7 +3,7 @@
 **Проект:** Imperative JVM Compiler (Language I, диалект команды Vitebsk)
 **Автор части:** Тимур Бикметов (Участник 2)
 **Ветка:** `feat/semantic-analyzer-pass2` (основана на `feat/semantic-analyzer-pass1`)
-**Статус:** реализовано. Все 15 примеров из `examples/` проходят анализ; 42 теста на типы и 8 тестов на границы массивов в `SemanticTestRunner` проходят.
+**Статус:** реализовано. Все 15 примеров из `examples/` проходят анализ; 49 тестов на типы и 8 тестов на границы массивов в `SemanticTestRunner` проходят.
 
 ---
 
@@ -48,15 +48,14 @@ var b is a + 1             // ошибок нет: a имеет ErrorType
 
 **Присваивание, инициализация, передача аргументов, `return`.** По спецификации передача аргумента — это присваивание,
 поэтому для всех четырёх случаев действует одно правило `TypeSystem.isAssignable`:
-- типы должны совпадать, с одним исключением: **integer неявно расширяется до real** (как `i2d` в JVM);
-- boolean ↔ число и real → integer неявно **запрещены** (Vitebsk: «No Implicit Casts»);
+- типы должны совпадать точно: **неявных приведений нет совсем** (Vitebsk: «No Implicit Casts»),
+  даже integer → real. `var r: real is 5` — ошибка, нужно `5 as real` или `5.0`;
 - record: только тот же самый тип, то есть совпадение по имени объявления («full name identity» в спецификации);
 - массивы сравниваются по структуре: совпадает тип элемента, и размеры равны, если оба известны.
   Поэтому `type Small is array [4] integer` можно передать в параметр `arr: array integer` (пример 10).
 
-Почему int → real разрешено: собственные тесты команды (примеры 2 и 13) содержат `(count as real) / 2`
-и `(total as real) / s.grades.size`, а презентация обосновывает запрет неявных приведений тем, что в JVM
-boolean и числа разделены. Если команда решит запретить и это, меняется одна строка в `isAssignable`.
+Из-за этого правила поправлены примеры 2 и 13: `(count as real) / 2.0` и
+`(total as real) / (s.grades.size as real)`.
 
 **Явное приведение `as`** (`TypeSystem.canCast`). Презентация Vitebsk требует, чтобы `as` следовал
 таблице conformance из спецификации:
@@ -73,14 +72,14 @@ boolean и числа разделены. Если команда решит з�
 
 | Операторы | Операнды | Результат |
 |---|---|---|
-| `+ - * /` | числа | integer, если оба integer, иначе real |
+| `+ - * /` | два integer или два real | тот же тип |
 | `%` | integer, integer | integer |
 | `and or xor`, `not` | boolean | boolean |
-| `< <= > >=` | числа | boolean |
-| `= /=` | числа, или два boolean, или две string | boolean |
+| `< <= > >=` | два integer или два real | boolean |
+| `= /=` | два операнда одного примитивного типа | boolean |
 | унарные `+ -` | число | тот же тип |
 
-Арифметика со `string` запрещена.
+Операнды разных типов (`1.5 + 1`, `1 < 2.5`, `1 = 1.0`) — ошибка. Арифметика со `string` запрещена.
 
 ## 4. Проверки Pass 2: `TypeChecker`
 
@@ -97,7 +96,7 @@ boolean и числа разделены. Если команда решит з�
 | V1 | `return` в процедуре без значения, в функции со значением нужного типа | `routine p() is return 1 end` → `... cannot return a value`; `return` в функции → `must return a value of type integer`; `return true` → `expected integer, got boolean` |
 | V1 | Функция возвращает значение на всех путях | `if x > 0 then return 1 end` → `Routine 'f' must return a value of type integer on every path` |
 | V1 | Тело `=> Expression` | `routine f(x: integer): boolean => x + 1` → `... its expression body has type integer` |
-| V3 | Нет неявных приведений | `var b: boolean is 1` → ошибка |
+| V3 | Нет неявных приведений | `var b: boolean is 1`, `var r: real is 5`, `1.5 + 1`, `f(1)` при `f(x: real)` → ошибка |
 | V4 | Допустимость `as` | `3.5 as boolean` → `Cannot convert real to boolean with 'as'`; `1 as array integer` → `'as' converts only to primitive types` |
 | V5 | Правила `string` | `1 + "a"`, `s * s` → ошибка оператора; `print p` (record) → `Cannot print a value of type P` |
 | V8 | Сигнатура forward-объявления совпадает с полным объявлением по типам | `routine f(x: integer): integer` + `routine f(x: real) ...` → `Parameter 1 of routine 'f' has type real, but its forward declaration says integer` |

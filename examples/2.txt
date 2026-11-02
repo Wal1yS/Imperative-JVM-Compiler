@@ -7,7 +7,7 @@ routine main() is
     print "1 as boolean is: ", back
 
     var count is 7
-    var half is (count as real) / 2
+    var half is (count as real) / 2.0
     print "7 / 2 in real is: ", half
 
     var rounded is half as integer

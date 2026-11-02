@@ -12,7 +12,7 @@ routine average(s: Student) : real is
         total := total + s.grades[i]
     end
 
-    return (total as real) / s.grades.size
+    return (total as real) / (s.grades.size as real)
 end
 
 routine main() is

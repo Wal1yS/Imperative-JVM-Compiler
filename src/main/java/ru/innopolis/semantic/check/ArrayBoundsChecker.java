@@ -14,20 +14,8 @@ import ru.innopolis.semantic.visitor.BaseASTVisitor;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Pass 3: Static Array Bounds Checker. Runs after the type checker and uses its annotations.
- * Does not modify the AST.
- * Implements:
- * - Curator Check 4: Array bound checking where possible, 0 <= i < size(arr)
- * - Vitebsk Check 6: arrays are 0-based, so the valid indices are 0 .. size - 1
- *
- * An index is checked when its value range is known at compile time: a constant expression,
- * or an expression of 'for' loop variables with constant ranges (e.g. 'arr[i + 1]' inside
- * 'for i in 0 .. 9').
- */
 public class ArrayBoundsChecker extends BaseASTVisitor<Void, Void> {
     private final SemanticContext context;
-    /** Value ranges [min, max] of loop variables of the enclosing 'for' loops with constant bounds. */
     private final Map<Symbol, long[]> loopRanges = new HashMap<>();
 
     public ArrayBoundsChecker(SemanticContext context) {
@@ -42,7 +30,6 @@ public class ArrayBoundsChecker extends BaseASTVisitor<Void, Void> {
         Symbol loopVar = context.getDeclaredSymbol(node);
         Integer from = range.isArrayIteration() ? null : ConstantEvaluator.evaluateInt(range.getStart());
         Integer to = range.isArrayIteration() ? null : ConstantEvaluator.evaluateInt(range.getEnd());
-        // An empty range never executes the body, so nothing inside can fail
         boolean known = loopVar != null && from != null && to != null && from <= to;
         if (known) {
             loopRanges.put(loopVar, new long[]{from, to});
@@ -57,8 +44,6 @@ public class ArrayBoundsChecker extends BaseASTVisitor<Void, Void> {
     @Override
     public Void visit(IfStatementNode node, Void unused) {
         node.getCondition().accept(this, null);
-        // Inside a branch the index may be guarded by the condition (e.g. 'if i > 0 then a[i - 1]'),
-        // so loop ranges are not trusted there; constant indices are still checked
         withoutLoopRanges(() -> {
             node.getThenBody().accept(this, null);
             if (node.getElseBody() != null) node.getElseBody().accept(this, null);
@@ -105,7 +90,6 @@ public class ArrayBoundsChecker extends BaseASTVisitor<Void, Void> {
         return null;
     }
 
-    /** Range [min, max] of an integer index expression, or null if unknown at compile time. */
     private long[] indexRange(Expression expr) {
         Integer constant = ConstantEvaluator.evaluateInt(expr);
         if (constant != null) {

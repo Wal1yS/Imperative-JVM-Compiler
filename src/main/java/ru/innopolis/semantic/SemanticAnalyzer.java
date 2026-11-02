@@ -10,10 +10,8 @@ public class SemanticAnalyzer {
 
     /**
      * Executes the semantic analysis pipeline.
-     * Pass 1: Declaration & Scope Checking (Person 1).
-     * Pass 2: Type Checking (Person 2).
-     * Pass 3: Static Array Bounds Checking (Person 2).
-     * Ready for the optimization passes (Person 3).
+     * Currently runs Pass 1: Declaration & Scope Checking (Person 1).
+     * Ready for Pass 2 (Person 2: TypeChecker) and Pass 3 (Person 3: Optimizers).
      */
     public static AnalysisResult analyze(ProgramNode ast) {
         SemanticContext context = new SemanticContext();
@@ -26,7 +24,6 @@ public class SemanticAnalyzer {
             return AnalysisResult.failure(context.getErrors(), context);
         }
 
-        // Pass 2: Type checking, annotates every expression with its type (Person 2)
         TypeChecker typeChecker = new TypeChecker(context);
         ast.accept(typeChecker, context.getGlobalScope());
 
@@ -34,7 +31,6 @@ public class SemanticAnalyzer {
             return AnalysisResult.failure(context.getErrors(), context);
         }
 
-        // Pass 3: Compile-time array bounds checking, uses the type annotations (Person 2)
         ArrayBoundsChecker boundsChecker = new ArrayBoundsChecker(context);
         ast.accept(boundsChecker, null);
 

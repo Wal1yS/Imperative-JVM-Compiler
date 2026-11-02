@@ -70,7 +70,6 @@ public class SemanticContext {
         return resolvedRoutines.get(node);
     }
 
-    /** Links a declaring node (variable, parameter, routine, type, for-loop) to the symbol it introduced. */
     public void putDeclaredSymbol(ASTNode node, Symbol symbol) {
         declaredSymbols.put(node, symbol);
     }
@@ -79,7 +78,6 @@ public class SemanticContext {
         return declaredSymbols.get(node);
     }
 
-    /** AAST annotation: semantic type of every checked expression (filled by the type checker). */
     public void putExpressionType(Expression node, Type type) {
         expressionTypes.put(node, type);
     }
@@ -88,7 +86,6 @@ public class SemanticContext {
         return expressionTypes.get(node);
     }
 
-    /** Semantic type of variables, parameters and loop variables (declared or inferred). */
     public void putSymbolType(Symbol symbol, Type type) {
         symbolTypes.put(symbol, type);
     }

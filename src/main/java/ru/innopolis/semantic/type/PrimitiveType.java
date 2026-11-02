@@ -1,6 +1,5 @@
 package ru.innopolis.semantic.type;
 
-/** Built-in types. Each is a singleton, so primitive types are compared by identity. */
 public final class PrimitiveType extends Type {
     public static final PrimitiveType INTEGER = new PrimitiveType("integer", true);
     public static final PrimitiveType REAL = new PrimitiveType("real", true);

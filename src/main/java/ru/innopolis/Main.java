@@ -37,7 +37,7 @@ public class Main {
             System.out.println("--- AST TREE ---");
             System.out.println(astString);
 
-            // 3. Semantic Analysis (scopes, types, array bounds)
+            // 3. Semantic Analysis (Pass 1)
             System.out.println("--- SEMANTIC ANALYSIS ---");
             AnalysisResult result = SemanticAnalyzer.analyze(program);
             if (!result.isSuccess()) {

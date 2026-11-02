@@ -18,14 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 
-/**
- * Converts syntactic TypeNodes into semantic Types.
- * Results are cached, so every declared type name and every record declaration maps to
- * exactly one Type object (record equivalence is by identity).
- */
 public class TypeResolver {
     private final SemanticContext context;
-    /** Types an expression (array sizes, untyped record member initializers). */
     private final BiFunction<Expression, IScope, Type> expressionTyper;
 
     private final Map<TypeSymbol, Type> namedTypes = new HashMap<>();
@@ -37,7 +31,6 @@ public class TypeResolver {
         this.expressionTyper = expressionTyper;
     }
 
-    /** Resolves a type node; a null node (no declared return type) means void. */
     public Type resolve(TypeNode node, IScope scope) {
         if (node == null) return VoidType.INSTANCE;
         if (node instanceof PrimitiveTypeNode p) return resolvePrimitive(p);
@@ -57,7 +50,6 @@ public class TypeResolver {
         return result;
     }
 
-    /** Resolves a declared type name, e.g. for a TypeDeclarationNode. */
     public Type resolveSymbol(TypeSymbol symbol, IScope scope) {
         Type cached = namedTypes.get(symbol);
         if (cached != null) return cached;
@@ -70,7 +62,6 @@ public class TypeResolver {
         IScope declaringScope = declaringScope(symbol, scope);
         Type result;
         if (symbol.getDeclaredType() instanceof RecordTypeNode r) {
-            // A named record takes the name of its type declaration (used in error messages)
             result = nodeTypes.get(r);
             if (result == null) {
                 result = resolveRecord(r, symbol.getName(), declaringScope);
@@ -98,7 +89,6 @@ public class TypeResolver {
     private Type resolveNamed(NamedTypeNode node, IScope scope) {
         Symbol sym = scope.resolve(node.getName());
         if (!(sym instanceof TypeSymbol typeSym)) {
-            // Already reported by the declaration pass
             return ErrorType.INSTANCE;
         }
         return resolveSymbol(typeSym, scope);
@@ -115,7 +105,6 @@ public class TypeResolver {
             context.addError(node.getSize().getPosition(), "Array size must be integer, got " + sizeType);
             return new ArrayType(element, null, true);
         }
-        // A non-constant size is allowed (run-time sized local arrays); it is just unknown here
         Integer size = ConstantEvaluator.evaluateInt(node.getSize());
         if (size != null && size <= 0) {
             context.addError(node.getSize().getPosition(), "Array size must be positive, got " + size);
@@ -126,7 +115,6 @@ public class TypeResolver {
 
     private Type resolveRecord(RecordTypeNode node, String name, IScope scope) {
         RecordType record = new RecordType(name);
-        // Members are resolved in the record's own scope created by the declaration pass
         IScope fieldScope = context.getNodeScope(node) != null ? context.getNodeScope(node) : scope;
         for (VariableDeclarationNode field : node.getFields()) {
             Type fieldType;

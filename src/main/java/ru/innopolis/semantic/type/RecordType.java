@@ -4,10 +4,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Record type. One RecordType object is created per record declaration and records are
- * compared by identity, which implements the "full name identity" rule of the language.
- */
 public final class RecordType extends Type {
     private final String name;
     private final Map<String, Type> fields = new LinkedHashMap<>();

@@ -185,7 +185,6 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
 
     @Override
     public Void visit(TypeDeclarationNode node, IScope scope) {
-        // Global types are registered by the pre-pass; local ones are defined here, at their point of declaration
         if (scope != context.getGlobalScope()) {
             if (scope.findInScope(node.getName()) != null) {
                 context.addError(node.getPosition(), "Duplicate declaration of type '" + node.getName() + "'");
@@ -203,7 +202,6 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
 
     @Override
     public Void visit(RecordTypeNode node, IScope scope) {
-        // Record members live in their own scope so they neither clash with nor leak into the enclosing one
         BlockScope fieldScope = new BlockScope(scope);
         context.putNodeScope(node, fieldScope);
         for (VariableDeclarationNode field : node.getFields()) {

@@ -18,25 +18,11 @@ import java.util.Map;
 
 import static ru.innopolis.semantic.type.PrimitiveType.*;
 
-/**
- * Pass 2: Type Checker. Computes the type of every expression bottom-up and stores it in the
- * SemanticContext (AST -> Annotated AST). Does not modify the AST.
- * Implements:
- * - Curator Check 3: Type checking of assignments, initializers, calls, returns, operators, conditions
- * - Vitebsk Check 1: void routines return nothing, typed routines must return a value
- * - Vitebsk Check 3: No implicit casts (only integer -> real widening)
- * - Vitebsk Check 4: Validation of explicit 'as' casts
- * - Vitebsk Check 5: Native 'string' type rules
- * - Vitebsk Check 8: Forward declaration signatures match the full declaration (types)
- * - Vitebsk Check 9: Loop variable type for ranges and array iteration
- * - Vitebsk Check 10: Array '.size' property (integer, read-only)
- */
 public class TypeChecker extends BaseASTVisitor<Type, IScope> {
     private final SemanticContext context;
     private final TypeResolver resolver;
     private final Map<RoutineSymbol, RoutineDeclarationNode> forwardDeclarations = new HashMap<>();
 
-    /** Return type and name of the routine being checked; null outside routines. */
     private Type currentReturnType;
     private String currentRoutineName;
 
@@ -44,8 +30,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
         this.context = context;
         this.resolver = new TypeResolver(context, this::valueType);
     }
-
-    // ---------------------------------------------------------------- declarations
 
     @Override
     public Type visit(ProgramNode node, IScope ignored) {
@@ -83,7 +67,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
                     + "' of type " + declared + " with a value of type " + init);
         }
 
-        // 'var x is e' takes the type inferred from its initializer
         Type varType = declared != null ? declared : (init != null ? init : ErrorType.INSTANCE);
         Symbol sym = context.getDeclaredSymbol(node);
         if (sym != null) {
@@ -147,7 +130,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
 
     private void checkForwardSignature(RoutineDeclarationNode full, RoutineDeclarationNode forward,
                                        List<Type> paramTypes, Type returnType, IScope scope) {
-        // A different parameter count is already reported by the declaration pass
         if (forward.getParameters().size() != full.getParameters().size()) return;
         for (int i = 0; i < paramTypes.size(); i++) {
             Type expected = resolver.resolve(forward.getParameters().get(i).getType(), scope);
@@ -164,7 +146,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
         }
     }
 
-    /** A body definitely returns if it contains a return, or an if/else whose both branches return. */
     private static boolean definitelyReturns(BodyNode body) {
         for (ASTNode item : body.getItems()) {
             if (item instanceof ReturnStatementNode) return true;
@@ -175,8 +156,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
         }
         return false;
     }
-
-    // ---------------------------------------------------------------- statements
 
     @Override
     public Type visit(BodyNode node, IScope scope) {
@@ -200,7 +179,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
         if (node.getTarget() instanceof VariableReferenceNode ref
                 && !(context.getResolvedSymbol(ref) instanceof VariableSymbol
                 || context.getResolvedSymbol(ref) instanceof ParameterSymbol)) {
-            // Reported by valueType() as "not a variable"
             return null;
         }
         if (!TypeSystem.isAssignable(target, value)) {
@@ -285,7 +263,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
     public Type visit(ReturnStatementNode node, IScope scope) {
         Type value = node.getValue() != null ? valueType(node.getValue(), scope) : null;
         if (currentReturnType == null) {
-            // 'return' outside a routine is reported by the declaration pass
             return null;
         }
         if (currentReturnType == VoidType.INSTANCE) {
@@ -305,17 +282,10 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
 
     @Override
     public Type visit(RoutineCallStatementNode node, IScope scope) {
-        // A call statement may invoke a function; its result is discarded
         typeOf(node.getCall(), scope);
         return null;
     }
 
-    // ---------------------------------------------------------------- expressions
-
-    /**
-     * Type of an expression whose value is used. A call to a routine without a return type
-     * cannot be used as a value.
-     */
     private Type valueType(Expression expr, IScope scope) {
         Type type = typeOf(expr, scope);
         if (type == VoidType.INSTANCE) {
@@ -477,7 +447,6 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
         for (int i = 0; i < args.size(); i++) {
             Type argType = valueType(args.get(i), scope);
             if (i >= params.size()) continue;
-            // Argument passing follows the assignment rules
             Type paramType = resolver.resolve(params.get(i).getTypeNode(), global);
             if (!TypeSystem.isAssignable(paramType, argType)) {
                 context.addError(args.get(i).getPosition(), "Argument " + (i + 1) + " of routine '" + routine.getName()

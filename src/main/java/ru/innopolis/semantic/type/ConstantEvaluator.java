@@ -3,13 +3,7 @@ package ru.innopolis.semantic.type;
 import ru.innopolis.ast.expression.*;
 import ru.innopolis.ast.type.PrimitiveTypeNode;
 
-/**
- * Evaluates constant expressions at compile time without modifying the AST.
- * Returns Integer, Double, Boolean or String, or null when the value is not a compile-time
- * constant (or its evaluation would fail at run time, e.g. division by zero).
- */
 public final class ConstantEvaluator {
-
     private ConstantEvaluator() {
     }
 
@@ -100,7 +94,6 @@ public final class ConstantEvaluator {
             case REAL -> v instanceof Double ? v
                     : v instanceof Integer i ? (Object) i.doubleValue()
                     : v instanceof Boolean b ? (Object) (b ? 1.0 : 0.0) : null;
-            // Integers other than 0 and 1 are a run-time error, so they are not folded
             case BOOLEAN -> v instanceof Boolean ? v
                     : v instanceof Integer i && (i == 0 || i == 1) ? (Object) (i == 1) : null;
             case STRING -> v instanceof String ? v : null;
