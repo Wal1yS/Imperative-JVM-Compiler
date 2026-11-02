@@ -1,9 +1,21 @@
 package ru.innopolis;
 
+import ru.innopolis.ast.ASTNode;
 import ru.innopolis.ast.ProgramNode;
+import ru.innopolis.ast.declaration.RoutineDeclarationNode;
+import ru.innopolis.ast.declaration.VariableDeclarationNode;
+import ru.innopolis.ast.expression.BinaryExpressionNode;
+import ru.innopolis.ast.expression.BoolLiteralNode;
+import ru.innopolis.ast.expression.Expression;
+import ru.innopolis.ast.expression.IntLiteralNode;
+import ru.innopolis.ast.expression.RoutineCallExpressionNode;
+import ru.innopolis.ast.statement.BodyNode;
+import ru.innopolis.ast.statement.IfStatementNode;
+import ru.innopolis.ast.statement.PrintStatementNode;
 import ru.innopolis.ast.statement.ReturnStatementNode;
 import ru.innopolis.lexer.Scanner;
 import ru.innopolis.lexer.Span;
+import ru.innopolis.lexer.TokenType;
 import ru.innopolis.lexer.token.Token;
 import ru.innopolis.parser.Parser;
 import ru.innopolis.semantic.AnalysisResult;
@@ -16,6 +28,7 @@ import ru.innopolis.semantic.scope.GlobalScope;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class SemanticTestRunner {
     private static int failures = 0;
@@ -108,6 +121,7 @@ public class SemanticTestRunner {
 
         runTypeCheckerTests();
         runArrayBoundsTests();
+        runOptimizationTests();
 
         int totalFailures = failed + failures;
         System.out.println("\n==================================================");
@@ -254,6 +268,125 @@ public class SemanticTestRunner {
                 "index takes values 1..10, array size is 10");
         testExpectError("loop variable plus offset", arr + "for i in 0 .. 9 loop print a[i + 1] end end",
                 "index takes values 1..10");
+    }
+
+    private static void runOptimizationTests() {
+        System.out.println("\n--- 6. Testing Person 3 AST Optimizations ---");
+
+        testOptimization("Fold 2 * 3 + 1 to 7",
+                "routine main() is print 2 * 3 + 1 end", program -> {
+                    Expression value = printedValue(routineBody(program, "main").get(0));
+                    expectOptimization(value instanceof IntLiteralNode literal && literal.getValue() == 7,
+                            "Expected integer literal 7 after folding");
+                });
+        testOptimization("Fold constant comparison to true",
+                "routine main() is print 3 < 5 end", program -> {
+                    Expression value = printedValue(routineBody(program, "main").get(0));
+                    expectOptimization(value instanceof BoolLiteralNode literal && literal.getValue(),
+                            "Expected boolean literal true after folding");
+                });
+        testOptimization("Replace constant if with its selected body",
+                "routine main() is if true then print 1 else print 2 end end", program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 1 && items.get(0) instanceof BodyNode,
+                            "Expected only the selected branch body");
+                    List<ASTNode> selected = ((BodyNode) items.get(0)).getItems();
+                    expectOptimization(selected.size() == 1
+                                    && printedValue(selected.get(0)) instanceof IntLiteralNode literal
+                                    && literal.getValue() == 1,
+                            "Expected only print 1 from the selected branch");
+                });
+        testOptimization("Remove while false and preserve following statement",
+                "routine main() is while false loop print 1 end\n print 2 end", program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 1
+                                    && printedValue(items.get(0)) instanceof IntLiteralNode literal
+                                    && literal.getValue() == 2,
+                            "Expected only print 2 after removing the loop");
+                });
+        testOptimization("Remove code after return",
+                "routine f(): integer is return 1\n print 2 end" + MAIN, program -> {
+                    List<ASTNode> items = routineBody(program, "f");
+                    expectOptimization(items.size() == 1 && items.get(0) instanceof ReturnStatementNode,
+                            "Expected only the return statement");
+                });
+        testOptimization("Keep code after a conditional return",
+                "routine f(flag: boolean): integer is if flag then return 1 end\n print 2\n return 3 end" + MAIN,
+                program -> {
+                    List<ASTNode> items = routineBody(program, "f");
+                    expectOptimization(items.size() == 3 && items.get(0) instanceof IfStatementNode
+                                    && items.get(1) instanceof PrintStatementNode
+                                    && items.get(2) instanceof ReturnStatementNode,
+                            "A conditional return must not remove reachable statements");
+                });
+        testOptimization("Remove an unused variable",
+                "routine main() is var unused is 1\n print 2 end", program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 1 && items.get(0) instanceof PrintStatementNode,
+                            "Expected the unused declaration to be removed");
+                });
+        testOptimization("Keep a variable that is read",
+                "routine main() is var used is 1\n print used end", program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 2
+                                    && items.get(0) instanceof VariableDeclarationNode declaration
+                                    && declaration.getName().equals("used")
+                                    && items.get(1) instanceof PrintStatementNode,
+                            "Expected the used variable and its print to remain");
+                });
+        testOptimization("Keep an unused initializer that calls a routine",
+                "routine f(): integer is print 1\n return 2 end\n routine main() is var d is f() end",
+                program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 1
+                                    && items.get(0) instanceof VariableDeclarationNode declaration
+                                    && declaration.getName().equals("d")
+                                    && declaration.getInitializer() instanceof RoutineCallExpressionNode call
+                                    && call.getRoutineName().equals("f"),
+                            "Expected var d is f() to remain, preserving the call");
+                });
+        testOptimization("Do not fold or discard division by zero",
+                "routine main() is var d is 10 / 0 end", program -> {
+                    List<ASTNode> items = routineBody(program, "main");
+                    expectOptimization(items.size() == 1
+                                    && items.get(0) instanceof VariableDeclarationNode declaration
+                                    && declaration.getInitializer() instanceof BinaryExpressionNode division
+                                    && division.getOperator() == TokenType.DIV
+                                    && division.getLeft() instanceof IntLiteralNode left && left.getValue() == 10
+                                    && division.getRight() instanceof IntLiteralNode right && right.getValue() == 0,
+                            "Expected the declaration and original division 10 / 0 to remain");
+                });
+    }
+
+    private static void testOptimization(String testName, String code, Consumer<ProgramNode> check) {
+        try {
+            AnalysisResult result = runAnalysis(code);
+            expectOptimization(result.isSuccess(), "Semantic analysis failed: " + result.getErrors());
+            check.accept(result.getProgram());
+            System.out.println("[PASS] " + testName);
+        } catch (Exception | AssertionError e) {
+            System.err.println("[FAIL] " + testName + ": " + e.getMessage());
+            failures++;
+        }
+    }
+
+    private static List<ASTNode> routineBody(ProgramNode program, String name) {
+        return program.getDeclarations().stream()
+                .filter(declaration -> declaration instanceof RoutineDeclarationNode routine
+                        && routine.getName().equals(name) && routine.getBody() != null)
+                .map(declaration -> ((RoutineDeclarationNode) declaration).getBody().getItems())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing routine body: " + name));
+    }
+
+    private static Expression printedValue(ASTNode node) {
+        expectOptimization(node instanceof PrintStatementNode print && print.getExpressions().size() == 1,
+                "Expected a print statement with one expression");
+        return ((PrintStatementNode) node).getExpressions().get(0);
+    }
+
+    private static void expectOptimization(boolean condition, String message) {
+        if (!condition) throw new AssertionError(message);
     }
 
     private static void testReturnOutsideRoutineDirect() {
