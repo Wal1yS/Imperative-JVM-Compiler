@@ -19,6 +19,7 @@ public class SemanticContext {
     private final Map<ASTNode, IScope> nodeScopes = new HashMap<>();
     private final Map<VariableReferenceNode, Symbol> resolvedSymbols = new HashMap<>();
     private final Map<RoutineCallExpressionNode, RoutineSymbol> resolvedRoutines = new HashMap<>();
+    private final Map<ASTNode, Symbol> declaredSymbols = new HashMap<>();
     private GlobalScope globalScope;
 
     public void addError(Span position, String message) {
@@ -63,6 +64,15 @@ public class SemanticContext {
 
     public RoutineSymbol getResolvedRoutine(RoutineCallExpressionNode node) {
         return resolvedRoutines.get(node);
+    }
+
+    /** Links a declaring node (variable, parameter, routine, type, for-loop) to the symbol it introduced. */
+    public void putDeclaredSymbol(ASTNode node, Symbol symbol) {
+        declaredSymbols.put(node, symbol);
+    }
+
+    public Symbol getDeclaredSymbol(ASTNode node) {
+        return declaredSymbols.get(node);
     }
 }
 

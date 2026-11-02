@@ -7,6 +7,7 @@ import ru.innopolis.ast.declaration.*;
 import ru.innopolis.ast.expression.*;
 import ru.innopolis.ast.statement.*;
 import ru.innopolis.ast.type.NamedTypeNode;
+import ru.innopolis.ast.type.RecordTypeNode;
 import ru.innopolis.semantic.context.SemanticContext;
 import ru.innopolis.semantic.scope.BlockScope;
 import ru.innopolis.semantic.scope.GlobalScope;
@@ -46,7 +47,9 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
                 if (globalScope.findInScope(t.getName()) != null) {
                     context.addError(t.getPosition(), "Duplicate declaration of type '" + t.getName() + "'");
                 } else {
-                    globalScope.define(new TypeSymbol(t.getName(), t.getPosition(), t.getType()));
+                    TypeSymbol tSym = new TypeSymbol(t.getName(), t.getPosition(), t.getType());
+                    globalScope.define(tSym);
+                    context.putDeclaredSymbol(t, tSym);
                 }
             } else if (decl instanceof RoutineDeclarationNode r) {
                 Symbol existing = globalScope.findInScope(r.getName());
@@ -54,6 +57,7 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
                     if (existing instanceof RoutineSymbol existingRoutine) {
                         if (existingRoutine.isForward() && !r.isForwardDeclaration()) {
                             checkSignatureMatch(existingRoutine, r);
+                            context.putDeclaredSymbol(r, existingRoutine);
                         } else {
                             context.addError(r.getPosition(), "Duplicate declaration of routine '" + r.getName() + "'");
                         }
@@ -74,6 +78,7 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
                             !r.isForwardDeclaration()
                     );
                     globalScope.define(rSym);
+                    context.putDeclaredSymbol(r, rSym);
                 }
             }
         }
@@ -132,6 +137,7 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
             } else {
                 ParameterSymbol paramSym = new ParameterSymbol(param.getName(), param.getPosition(), param.getType());
                 routineScope.define(paramSym);
+                context.putDeclaredSymbol(param, paramSym);
                 param.accept(this, routineScope);
             }
         }
@@ -171,8 +177,38 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
         } else {
             VariableSymbol varSym = new VariableSymbol(node.getName(), node.getPosition(), node.getType(), false);
             scope.define(varSym);
+            context.putDeclaredSymbol(node, varSym);
         }
 
+        return null;
+    }
+
+    @Override
+    public Void visit(TypeDeclarationNode node, IScope scope) {
+        // Global types are registered by the pre-pass; local ones are defined here, at their point of declaration
+        if (scope != context.getGlobalScope()) {
+            if (scope.findInScope(node.getName()) != null) {
+                context.addError(node.getPosition(), "Duplicate declaration of type '" + node.getName() + "'");
+            } else {
+                TypeSymbol tSym = new TypeSymbol(node.getName(), node.getPosition(), node.getType());
+                scope.define(tSym);
+                context.putDeclaredSymbol(node, tSym);
+            }
+        }
+        if (node.getType() != null) {
+            node.getType().accept(this, scope);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visit(RecordTypeNode node, IScope scope) {
+        // Record members live in their own scope so they neither clash with nor leak into the enclosing one
+        BlockScope fieldScope = new BlockScope(scope);
+        context.putNodeScope(node, fieldScope);
+        for (VariableDeclarationNode field : node.getFields()) {
+            field.accept(this, fieldScope);
+        }
         return null;
     }
 
@@ -248,6 +284,7 @@ public class DeclarationAndScopeChecker extends BaseASTVisitor<Void, IScope> {
         BlockScope forScope = new BlockScope(scope);
         VariableSymbol loopVar = new VariableSymbol(node.getVariableName(), node.getPosition(), null, true);
         forScope.define(loopVar);
+        context.putDeclaredSymbol(node, loopVar);
 
         node.getBody().accept(this, forScope);
         return null;

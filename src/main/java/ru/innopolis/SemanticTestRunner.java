@@ -91,6 +91,21 @@ public class SemanticTestRunner {
         testExpectSuccess("Shadowing in nested block",
                 "routine main() is var a is 1\n if true then var a is 2\n print a end\n print a end");
 
+        // Regression tests for Pass 1 scope fixes
+        System.out.println("\n--- 3. Testing Pass 1 Scope Fixes ---");
+        testExpectSuccess("Two records with the same field name",
+                "type P is record var x: integer end\n type V is record var x: real end\n routine main() is end");
+        testExpectError("Record field does not leak into enclosing scope",
+                "type P is record var x: integer end\n routine main() is print x end",
+                "Undeclared identifier 'x'");
+        testExpectSuccess("Global variable named like a record field",
+                "type P is record var x: integer end\n var x is 5\n routine main() is print x end");
+        testExpectError("Duplicate record field",
+                "type P is record var x: integer\n var x: integer end\n routine main() is end",
+                "already declared");
+        testExpectSuccess("Local type declaration",
+                "routine main() is type T is integer\n var a: T is 1\n print a end");
+
         System.out.println("\n==================================================");
         System.out.println("   ALL TESTS COMPLETED SUCCESSFULLY!              ");
         System.out.println("==================================================");
