@@ -5,13 +5,15 @@ import ru.innopolis.semantic.check.ArrayBoundsChecker;
 import ru.innopolis.semantic.check.DeclarationAndScopeChecker;
 import ru.innopolis.semantic.check.TypeChecker;
 import ru.innopolis.semantic.context.SemanticContext;
+import ru.innopolis.semantic.optimize.OptimizerPipeline;
 
 public class SemanticAnalyzer {
 
     /**
      * Executes the semantic analysis pipeline.
-     * Currently runs Pass 1: Declaration & Scope Checking (Person 1).
-     * Ready for Pass 2 (Person 2: TypeChecker) and Pass 3 (Person 3: Optimizers).
+     * Pass 1: Declarations and scopes (Person 1).
+     * Passes 2 and 3: Types and static array bounds (Person 2).
+     * Pass 4: AST optimizations (Person 3), only after all checks pass.
      */
     public static AnalysisResult analyze(ProgramNode ast) {
         SemanticContext context = new SemanticContext();
@@ -38,7 +40,7 @@ public class SemanticAnalyzer {
             return AnalysisResult.failure(context.getErrors(), context);
         }
 
-        // Return successfully analyzed AST and populated context
-        return AnalysisResult.success(ast, context);
+        // Optimize only the successfully checked tree, retaining its semantic annotations.
+        return OptimizerPipeline.optimize(AnalysisResult.success(ast, context));
     }
 }
