@@ -22,3 +22,4 @@ routine main() is
     var res is compute()
     print res
 end
+
