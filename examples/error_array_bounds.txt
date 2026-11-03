@@ -1,0 +1,4 @@
+routine main() is
+    var items: array [5] integer
+    items[5] := 100
+end

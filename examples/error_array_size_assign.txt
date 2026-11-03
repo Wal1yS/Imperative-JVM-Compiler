@@ -1,0 +1,4 @@
+routine main() is
+    var arr: array [10] integer
+    arr.size := 20
+end

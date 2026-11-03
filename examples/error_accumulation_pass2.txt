@@ -1,0 +1,15 @@
+routine calc(x: integer, flag: boolean): integer is
+    if flag then
+        return true
+    else
+        return 1
+    end
+end
+
+routine main() is
+    var a: integer is 10 + true
+    var b: integer is 3.14
+    var arr: array [5] integer
+    arr.size := 10
+    print calc(1)
+end

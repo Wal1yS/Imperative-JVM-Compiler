@@ -1,0 +1,10 @@
+routine helper(x: integer): integer
+
+routine main() is
+    var a: integer is 10
+    var a: integer is 20
+    print undeclaredVar
+    for i in 1..3 loop
+        i := 0
+    end
+end

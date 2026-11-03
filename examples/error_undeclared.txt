@@ -1,0 +1,3 @@
+routine main() is
+    var result: integer is unknownVar + 10
+end

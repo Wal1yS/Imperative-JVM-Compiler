@@ -7,3 +7,4 @@ routine main() is
         print 0
     end
 end
+

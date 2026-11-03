@@ -1,0 +1,5 @@
+routine main() is
+    for i in 1..5 loop
+        i := i * 2
+    end
+end
