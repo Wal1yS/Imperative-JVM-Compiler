@@ -1,0 +1,24 @@
+routine compute(): integer is
+    var deadVar is 99
+    var chainedUnused is deadVar
+    var calc is (10 + 2) * 5
+    
+    while false loop
+        print "this while loop is dead code"
+    end
+
+    if true then
+        print calc
+    else
+        print "this else branch is dead code"
+    end
+
+    return calc
+    print "this statement is unreachable after return"
+end
+
+routine main() is
+    var unusedScalar is 42
+    var res is compute()
+    print res
+end

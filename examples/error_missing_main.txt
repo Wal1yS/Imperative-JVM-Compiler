@@ -1,0 +1,3 @@
+routine foo() is
+    print "no main here"
+end

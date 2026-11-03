@@ -1,0 +1,7 @@
+routine doSomething() is
+    return 42
+end
+
+routine main() is
+    doSomething()
+end

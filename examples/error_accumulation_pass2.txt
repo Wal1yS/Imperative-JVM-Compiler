@@ -13,3 +13,4 @@ routine main() is
     arr.size := 10
     print calc(1)
 end
+

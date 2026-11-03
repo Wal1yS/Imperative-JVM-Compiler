@@ -2,3 +2,4 @@ routine main() is
     var x: integer is 42
     x := 3.14
 end
+
