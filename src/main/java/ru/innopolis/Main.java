@@ -33,11 +33,11 @@ public class Main {
             Parser parser = new Parser(tokens);
             ProgramNode program = parser.parseProgram();
 
-            String astString = ASTPrinter.print(program);
-            System.out.println("--- AST TREE ---");
-            System.out.println(astString);
+            String originalAstString = ASTPrinter.print(program);
+            System.out.println("--- ORIGINAL AST TREE ---");
+            System.out.println(originalAstString);
 
-            // 3. Semantic Analysis (Pass 1)
+            // 3. Semantic Analysis (Passes 1 - 4)
             System.out.println("--- SEMANTIC ANALYSIS ---");
             AnalysisResult result = SemanticAnalyzer.analyze(program);
             if (!result.isSuccess()) {
@@ -47,9 +47,26 @@ public class Main {
                 }
                 return;
             }
-            System.out.println("Semantic checks passed successfully!");
 
-            // 4. Write outputs
+            System.out.println("Pass 1: Scope & Declarations OK");
+            System.out.println("Pass 2: Types OK");
+            System.out.println("Pass 3: Array Bounds OK");
+            System.out.println("Pass 4: AST Optimizations OK");
+            System.out.println("Semantic checks and optimizations passed successfully!");
+
+            // 4. Output Optimized AST Tree
+            String optimizedAstString = ASTPrinter.print(result.getProgram());
+            boolean wasModified = !optimizedAstString.equals(originalAstString);
+
+            System.out.println("\n--- OPTIMIZED AST TREE (Pass 4) ---");
+            if (wasModified) {
+                System.out.println("(AST was transformed: constant folding / dead code / unused variables applied)");
+            } else {
+                System.out.println("(No optimizations applicable for this program)");
+            }
+            System.out.println(optimizedAstString);
+
+            // 5. Write outputs
             Path outputDir = Path.of("output");
             if (!Files.exists(outputDir)) {
                 Files.createDirectories(outputDir);
@@ -65,20 +82,23 @@ public class Main {
                 for (Token token : tokens) {
                     writer.println(token);
                 }
-                writer.println("\n--- AST ---");
-                writer.println(astString);
+                writer.println("\n--- ORIGINAL AST ---");
+                writer.println(originalAstString);
+                writer.println("\n--- OPTIMIZED AST ---");
+                writer.println(optimizedAstString);
                 writer.println("\n--- SEMANTIC STATUS ---");
                 writer.println("Pass 1: Scope & Declarations OK");
                 writer.println("Pass 2: Types OK");
                 writer.println("Pass 3: Array Bounds OK");
+                writer.println("Pass 4: AST Optimizations OK");
             }
 
-            System.out.println("Готово! Токены и AST успешно сохранены в файл: " + outputPath);
+            System.out.println("\nDone! Analysis results and optimized AST saved to: " + outputPath);
 
         } catch (IOException e) {
-            System.err.println("Ошибка ввода/вывода: " + e.getMessage());
+            System.err.println("IO Error: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("Ошибка анализа: " + e.getMessage());
+            System.err.println("Analysis Error: " + e.getMessage());
         }
     }
 }

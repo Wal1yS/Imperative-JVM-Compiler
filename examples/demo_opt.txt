@@ -1,0 +1,9 @@
+routine main() is
+    var unused: integer is 42
+    var x is 2 * 3 + 1
+    if true then
+        print x
+    else
+        print 0
+    end
+end
