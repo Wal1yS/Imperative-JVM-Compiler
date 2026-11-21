@@ -26,6 +26,7 @@ public class SemanticAnalyzer {
             return AnalysisResult.failure(context.getErrors(), context);
         }
 
+        // Pass 2
         TypeChecker typeChecker = new TypeChecker(context);
         ast.accept(typeChecker, context.getGlobalScope());
 
@@ -33,6 +34,7 @@ public class SemanticAnalyzer {
             return AnalysisResult.failure(context.getErrors(), context);
         }
 
+        // Pass 3
         ArrayBoundsChecker boundsChecker = new ArrayBoundsChecker(context);
         ast.accept(boundsChecker, null);
 

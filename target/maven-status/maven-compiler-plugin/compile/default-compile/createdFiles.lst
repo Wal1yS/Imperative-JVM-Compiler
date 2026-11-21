@@ -1,0 +1,7 @@
+ru\innopolis\semantic\optimize\ConstantFoldingOptimizer$1.class
+ru\innopolis\semantic\check\ArrayBoundsChecker$1.class
+ru\innopolis\codegen\JVMCodeGenerator$1.class
+ru\innopolis\semantic\type\ConstantEvaluator$1.class
+ru\innopolis\parser\Parser$1.class
+ru\innopolis\semantic\type\TypeSystem$1.class
+ru\innopolis\semantic\type\TypeResolver$1.class
