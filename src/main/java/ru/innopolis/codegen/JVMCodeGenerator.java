@@ -588,20 +588,18 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(IfStatementNode node, CodegenContext context) {
-        // Person 2 hook: Control flow (if-else)
         MethodVisitor mv = context.getCurrentMethodVisitor();
-        node.getCondition().accept(this, context);
-
-        Label labelElse = new Label();
+        BodyNode elseBody = node.getElseBody();
         Label labelEnd = new Label();
+        Label labelFalse = elseBody == null ? labelEnd : new Label();
 
-        mv.visitJumpInsn(Opcodes.IFEQ, labelElse);
+        node.getCondition().accept(this, context);
+        mv.visitJumpInsn(Opcodes.IFEQ, labelFalse);
         node.getThenBody().accept(this, context);
-        mv.visitJumpInsn(Opcodes.GOTO, labelEnd);
-
-        mv.visitLabel(labelElse);
-        if (node.getElseBody() != null) {
-            node.getElseBody().accept(this, context);
+        if (elseBody != null) {
+            mv.visitJumpInsn(Opcodes.GOTO, labelEnd);
+            mv.visitLabel(labelFalse);
+            elseBody.accept(this, context);
         }
 
         mv.visitLabel(labelEnd);
@@ -610,7 +608,6 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(WhileLoopNode node, CodegenContext context) {
-        // Person 2 hook: Control flow (while loop)
         MethodVisitor mv = context.getCurrentMethodVisitor();
         Label labelStart = new Label();
         Label labelEnd = new Label();
@@ -628,19 +625,79 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(ForLoopNode node, CodegenContext context) {
-        // Person 2 hook: Control flow (for loop)
+        MethodVisitor mv = context.getCurrentMethodVisitor();
+        LocalVariableIndexManager locals = context.getLocalIndexManager();
+        RangeNode range = node.getRange();
+        Symbol loopVariable = context.getSemanticContext().getDeclaredSymbol(node);
+        Type elementType = context.getSymbolType(loopVariable);
+        int variableSlot = context.allocateLocalSlot(loopVariable, elementType);
+        boolean arrayIteration = range.isArrayIteration();
+        int counterSlot = arrayIteration ? locals.allocateTemporarySlot(PrimitiveType.INTEGER) : variableSlot;
+        int limitSlot = locals.allocateTemporarySlot(PrimitiveType.INTEGER);
+        boolean reverse = node.isReverse();
+        int lowerSlot = reverse ? limitSlot : counterSlot;
+        int upperSlot = reverse ? counterSlot : limitSlot;
+
+        range.accept(this, context);
+        int arraySlot = -1;
+        if (arrayIteration) {
+            arraySlot = locals.allocateTemporarySlot(context.getExpressionType(range.getStart()));
+            mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitVarInsn(Opcodes.ISTORE, lowerSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+            mv.visitInsn(Opcodes.ARRAYLENGTH);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitInsn(Opcodes.ISUB);
+        }
+        mv.visitVarInsn(Opcodes.ISTORE, upperSlot);
+        if (!arrayIteration) {
+            mv.visitVarInsn(Opcodes.ISTORE, lowerSlot);
+        }
+
+        Label body = new Label();
+        Label end = new Label();
+        mv.visitVarInsn(Opcodes.ILOAD, lowerSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, upperSlot);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGT, end);
+
+        mv.visitLabel(body);
+        if (arrayIteration) {
+            mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+            mv.visitVarInsn(Opcodes.ILOAD, counterSlot);
+            int loadOpcode = switch (JVMTypeMapper.toDescriptor(elementType, context.getProgramClassName())) {
+                case "I" -> Opcodes.IALOAD;
+                case "D" -> Opcodes.DALOAD;
+                case "Z" -> Opcodes.BALOAD;
+                default -> Opcodes.AALOAD;
+            };
+            mv.visitInsn(loadOpcode);
+            emitStoreInsn(elementType, variableSlot, mv);
+        }
+        node.getBody().accept(this, context);
+
+        // Stop before stepping past the last value, including Integer.MIN_VALUE and MAX_VALUE.
+        mv.visitVarInsn(Opcodes.ILOAD, counterSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, limitSlot);
+        mv.visitJumpInsn(Opcodes.IF_ICMPEQ, end);
+        mv.visitIincInsn(counterSlot, reverse ? -1 : 1);
+        mv.visitJumpInsn(Opcodes.GOTO, body);
+        mv.visitLabel(end);
         return null;
     }
 
     @Override
     public Void visit(RangeNode node, CodegenContext context) {
-        // Person 2 hook: range bounds
+        node.getStart().accept(this, context);
+        if (!node.isArrayIteration()) {
+            node.getEnd().accept(this, context);
+        }
         return null;
     }
 
     @Override
     public Void visit(PrintStatementNode node, CodegenContext context) {
-        // Person 2 hook: print statement
+        // Print the arguments in order and terminate the statement with one newline.
         MethodVisitor mv = context.getCurrentMethodVisitor();
         for (Expression expr : node.getExpressions()) {
             mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");

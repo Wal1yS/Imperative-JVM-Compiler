@@ -34,9 +34,13 @@ public class LocalVariableIndexManager {
             return symbolSlots.get(symbol);
         }
 
-        int slot = nextSlotIndex;
+        int slot = allocateTemporarySlot(type);
         symbolSlots.put(symbol, slot);
+        return slot;
+    }
 
+    public int allocateTemporarySlot(Type type) {
+        int slot = nextSlotIndex;
         if (type == PrimitiveType.REAL) {
             nextSlotIndex += 2; // double occupies 2 32-bit JVM local slots
         } else {
