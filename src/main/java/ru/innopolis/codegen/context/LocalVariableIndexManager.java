@@ -4,6 +4,8 @@ import ru.innopolis.semantic.symbol.Symbol;
 import ru.innopolis.semantic.type.PrimitiveType;
 import ru.innopolis.semantic.type.Type;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,6 +17,7 @@ import java.util.Map;
 public class LocalVariableIndexManager {
     private int nextSlotIndex = 0;
     private final Map<Symbol, Integer> symbolSlots = new HashMap<>();
+    private final Deque<Integer> scopeStarts = new ArrayDeque<>();
 
     public LocalVariableIndexManager() {
         this(0); // static methods have no 'this' pointer, slot 0 is the first parameter
@@ -55,6 +58,19 @@ public class LocalVariableIndexManager {
             throw new IllegalStateException("Local slot not allocated for symbol: " + symbol.getName());
         }
         return slot;
+    }
+
+    public void enterScope() {
+        scopeStarts.push(nextSlotIndex);
+    }
+
+    public void exitScope() {
+        if (scopeStarts.isEmpty()) {
+            throw new IllegalStateException("exitScope() called without a matching enterScope()");
+        }
+        int scopeStart = scopeStarts.pop();
+        symbolSlots.values().removeIf(slot -> slot >= scopeStart);
+        nextSlotIndex = scopeStart;
     }
 
     public boolean hasSlot(Symbol symbol) {
