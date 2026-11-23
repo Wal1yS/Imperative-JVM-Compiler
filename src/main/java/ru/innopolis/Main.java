@@ -14,6 +14,7 @@ import ru.innopolis.semantic.context.SemanticError;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,7 +23,7 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) {
-        String filePath = (args != null && args.length > 0) ? args[0] : "examples/all_optimizations_demo.txt";
+        String filePath = (args != null && args.length > 0) ? args[0] : "examples/error_accumulation_pass1.txt";
 
         try {
             Path inputPath = Path.of(filePath);
@@ -138,8 +139,11 @@ public class Main {
                 System.out.println("--- JVM EXECUTION COMPLETED ---");
             } catch (UnsupportedOperationException e) {
                 System.out.println("[NOTE] Codegen extension hook: " + e.getMessage());
+            } catch (InvocationTargetException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                System.err.println("Runtime error in compiled program: " + cause);
             } catch (Exception e) {
-                System.err.println("Execution note: " + e.getMessage());
+                System.err.println("Codegen error: " + e);
             }
 
         } catch (IOException e) {

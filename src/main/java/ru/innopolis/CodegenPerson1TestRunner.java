@@ -2,12 +2,16 @@ package ru.innopolis;
 
 import ru.innopolis.ast.ProgramNode;
 import ru.innopolis.codegen.JVMCodeGenerator;
+import ru.innopolis.codegen.context.LocalVariableIndexManager;
 import ru.innopolis.codegen.runtime.BytecodeClassLoader;
 import ru.innopolis.lexer.Scanner;
 import ru.innopolis.lexer.token.Token;
 import ru.innopolis.parser.Parser;
 import ru.innopolis.semantic.AnalysisResult;
 import ru.innopolis.semantic.SemanticAnalyzer;
+import ru.innopolis.semantic.symbol.Symbol;
+import ru.innopolis.semantic.symbol.VariableSymbol;
+import ru.innopolis.semantic.type.PrimitiveType;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -37,6 +41,10 @@ public class CodegenPerson1TestRunner {
         testExpressionBodyRoutine();
         testLogicalAndComparisonOperators();
         testJVMMainEntryPointExecution();
+        testRealComparisonsWithNaN();
+        testStringDefaultValue();
+        testScopedSlotReuse();
+        testBlockLocalsExecution();
 
         System.out.println("\n==================================================");
         System.out.println("RESULTS: " + passed + " PASSED, " + failed + " FAILED");
@@ -265,6 +273,112 @@ public class CodegenPerson1TestRunner {
                     "Expected executed=true, got " + executed);
         } catch (Exception e) {
             check("Standard public static void main(String[] args) JVM bridge execution", false, e.getMessage());
+        }
+    }
+
+    private static void testRealComparisonsWithNaN() {
+        try {
+            String code = """
+                routine gt(a: real, b: real): boolean => a > b
+                routine ge(a: real, b: real): boolean => a >= b
+                routine lt(a: real, b: real): boolean => a < b
+                routine le(a: real, b: real): boolean => a <= b
+                routine eq(a: real, b: real): boolean => a = b
+                routine ne(a: real, b: real): boolean => a /= b
+                routine main() is
+                end
+                """;
+            Class<?> clazz = compileToClass(code, "TestNaN");
+            double nan = Double.NaN;
+            boolean gt = (boolean) clazz.getMethod("gt", double.class, double.class).invoke(null, nan, 1.0);
+            boolean ge = (boolean) clazz.getMethod("ge", double.class, double.class).invoke(null, nan, 1.0);
+            boolean lt = (boolean) clazz.getMethod("lt", double.class, double.class).invoke(null, nan, 1.0);
+            boolean le = (boolean) clazz.getMethod("le", double.class, double.class).invoke(null, nan, 1.0);
+            boolean eq = (boolean) clazz.getMethod("eq", double.class, double.class).invoke(null, nan, nan);
+            boolean ne = (boolean) clazz.getMethod("ne", double.class, double.class).invoke(null, nan, nan);
+            boolean ordinary = (boolean) clazz.getMethod("gt", double.class, double.class).invoke(null, 2.0, 1.0)
+                    && (boolean) clazz.getMethod("le", double.class, double.class).invoke(null, 1.0, 1.0);
+            check("Real comparisons with NaN follow IEEE 754", !gt && !ge && !lt && !le && !eq && ne && ordinary,
+                    "Got >:" + gt + " >=:" + ge + " <:" + lt + " <=:" + le + " =:" + eq + " /=:" + ne
+                            + " ordinary:" + ordinary);
+        } catch (Exception e) {
+            check("Real comparisons with NaN follow IEEE 754", false, e.getMessage());
+        }
+    }
+
+    private static void testStringDefaultValue() {
+        try {
+            String code = """
+                var globalText: string
+                routine localIsEmpty(): boolean is
+                    var s: string
+                    return s = ""
+                end
+                routine main() is
+                end
+                """;
+            Class<?> clazz = compileToClass(code, "TestStringDefault");
+            Object global = clazz.getField("globalText").get(null);
+            boolean local = (boolean) clazz.getMethod("localIsEmpty").invoke(null);
+            check("Uninitialized string defaults to empty string", "".equals(global) && local,
+                    "Expected global=\"\" and local=true, got " + global + ", " + local);
+        } catch (Exception e) {
+            check("Uninitialized string defaults to empty string", false, e.getMessage());
+        }
+    }
+
+    private static void testScopedSlotReuse() {
+        LocalVariableIndexManager slots = new LocalVariableIndexManager();
+        Symbol param = new VariableSymbol("p", null, null, false);
+        Symbol inner = new VariableSymbol("inner", null, null, false);
+        Symbol sibling = new VariableSymbol("sibling", null, null, false);
+
+        int paramSlot = slots.allocateSlot(param, PrimitiveType.INTEGER);
+        slots.enterScope();
+        int innerSlot = slots.allocateSlot(inner, PrimitiveType.REAL);
+        slots.exitScope();
+        boolean innerReleased = !slots.hasSlot(inner) && slots.getNextSlotIndex() == 1;
+        slots.enterScope();
+        int siblingSlot = slots.allocateSlot(sibling, PrimitiveType.INTEGER);
+        slots.exitScope();
+
+        check("Block-scoped local slots are released and reused",
+                paramSlot == 0 && innerSlot == 1 && siblingSlot == 1 && innerReleased && slots.hasSlot(param),
+                "Got param=" + paramSlot + " inner=" + innerSlot + " sibling=" + siblingSlot
+                        + " released=" + innerReleased);
+    }
+
+    private static void testBlockLocalsExecution() {
+        try {
+            String code = """
+                routine pick(n: integer): real is
+                    var base is 1.5
+                    if n > 0 then
+                        var a is 2.5
+                        var k is n * 2
+                        base := base + a + k as real
+                    else
+                        var b is 10
+                        if b > n then
+                            var c is 0.25
+                            base := base - c
+                        end
+                    end
+                    var tail is 100
+                    return base + tail as real
+                end
+                routine main() is
+                end
+                """;
+            Class<?> clazz = compileToClass(code, "TestBlockLocals");
+            Method pick = clazz.getMethod("pick", int.class);
+            double pos = (double) pick.invoke(null, 3);
+            double neg = (double) pick.invoke(null, -1);
+            check("Block-local variables with reused slots execute correctly",
+                    Math.abs(pos - 110.0) < 1e-9 && Math.abs(neg - 101.25) < 1e-9,
+                    "Expected 110.0 and 101.25, got " + pos + ", " + neg);
+        } catch (Exception e) {
+            check("Block-local variables with reused slots execute correctly", false, e.getMessage());
         }
     }
 }

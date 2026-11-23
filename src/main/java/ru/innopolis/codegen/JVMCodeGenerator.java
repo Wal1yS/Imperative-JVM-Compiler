@@ -408,8 +408,8 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
             };
             mv.visitJumpInsn(jumpOpcode, labelTrue);
         } else if (operandType == PrimitiveType.REAL) {
-            // dcmpg handles NaN by pushing 1
-            mv.visitInsn(Opcodes.DCMPG);
+            boolean lessFamily = op == TokenType.LESS || op == TokenType.LESS_EQUAL;
+            mv.visitInsn(lessFamily ? Opcodes.DCMPG : Opcodes.DCMPL);
             int jumpOpcode = switch (op) {
                 case LESS -> Opcodes.IFLT;
                 case LESS_EQUAL -> Opcodes.IFLE;
@@ -524,8 +524,15 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(BodyNode node, CodegenContext context) {
+        LocalVariableIndexManager slots = context.getLocalIndexManager();
+        if (slots != null) {
+            slots.enterScope();
+        }
         for (ru.innopolis.ast.ASTNode item : node.getItems()) {
             item.accept(this, context);
+        }
+        if (slots != null) {
+            slots.exitScope();
         }
         return null;
     }
@@ -777,6 +784,8 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
             mv.visitInsn(Opcodes.ICONST_0);
         } else if (type == PrimitiveType.REAL) {
             mv.visitInsn(Opcodes.DCONST_0);
+        } else if (type == PrimitiveType.STRING) {
+            mv.visitLdcInsn("");
         } else {
             mv.visitInsn(Opcodes.ACONST_NULL);
         }
