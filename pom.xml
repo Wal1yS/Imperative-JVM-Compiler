@@ -27,4 +27,27 @@
         </dependency>
     </dependencies>
 
+    <!-- The course launch commands use target/classes as the entire compiler classpath. -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>compiler-runtime-classpath</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>unpack-dependencies</goal></goals>
+                        <configuration>
+                            <includeGroupIds>org.ow2.asm</includeGroupIds>
+                            <includes>org/objectweb/asm/**/*.class</includes>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

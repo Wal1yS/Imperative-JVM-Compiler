@@ -4,7 +4,8 @@ import ru.innopolis.ast.ASTPrinter;
 import ru.innopolis.ast.ProgramNode;
 import ru.innopolis.codegen.BytecodePrinter;
 import ru.innopolis.codegen.JVMCodeGenerator;
-import ru.innopolis.codegen.runtime.BytecodeClassLoader;
+import ru.innopolis.runtime.BytecodeClassLoader;
+import ru.innopolis.runtime.ClassFileWriter;
 import ru.innopolis.lexer.Scanner;
 import ru.innopolis.lexer.token.Token;
 import ru.innopolis.parser.Parser;
@@ -15,7 +16,6 @@ import ru.innopolis.semantic.context.SemanticError;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,7 +23,19 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) {
-        String filePath = (args != null && args.length > 0) ? args[0] : "examples/error_accumulation_pass1.txt";
+        int status = run(args);
+        if (status != 0) System.exit(status);
+    }
+
+    private static int run(String[] args) {
+        boolean compileOnly = args.length > 0 && "--compile".equals(args[0]);
+        boolean runFlag = args.length > 0 && "--run".equals(args[0]);
+        int input = compileOnly || runFlag ? 1 : 0;
+        if (args.length != 0 && (args.length != input + 1 || args[input].startsWith("--"))) {
+            System.err.println("Usage: Main [--compile | --run] <source-file>");
+            return 2;
+        }
+        String filePath = args.length == 0 ? "examples/error_accumulation_pass1.txt" : args[input];
 
         try {
             Path inputPath = Path.of(filePath);
@@ -51,7 +63,7 @@ public class Main {
                 for (SemanticError error : result.getErrors()) {
                     System.err.println("  " + error);
                 }
-                return;
+                return 1;
             }
 
             System.out.println("Pass 1: Scope & Declarations OK");
@@ -101,55 +113,47 @@ public class Main {
 
             System.out.println("\nDone! Analysis results and optimized AST saved to: " + outputPath);
 
-            // 6. JVM Bytecode Generation & Execution (Person 1)
-            try {
-                System.out.println("\n--- JVM BYTECODE GENERATION ---");
-                String baseName = inputPath.getFileName().toString().replaceAll("\\.[^.]+$", "");
-                String className = "Compiled_" + baseName;
-                Map<String, byte[]> generatedClasses = JVMCodeGenerator.compile(result, className);
+            // 6. JVM bytecode generation, export and optional execution
+            System.out.println("\n--- JVM BYTECODE GENERATION ---");
+            String className = "CompiledProgram";
+            Map<String, byte[]> generatedClasses = JVMCodeGenerator.compile(result, className);
+            ClassFileWriter.writeAll(outputDir, generatedClasses);
 
-                for (Map.Entry<String, byte[]> entry : generatedClasses.entrySet()) {
-                    String clsName = entry.getKey();
-                    byte[] bytecode = entry.getValue();
+            for (Map.Entry<String, byte[]> entry : generatedClasses.entrySet()) {
+                String clsName = entry.getKey();
+                byte[] bytecode = entry.getValue();
 
-                    // 1. Save binary .class file
-                    Path classFile = outputDir.resolve(clsName + ".class");
-                    Files.write(classFile, bytecode);
-                    System.out.println("Generated JVM binary: " + classFile);
+                // 1. Save binary .class file
+                Path classFile = outputDir.resolve(clsName + ".class");
+                System.out.println("Generated JVM binary: " + classFile);
 
-                    // 2. Disassemble into pure human-readable JVM bytecode
-                    String disassembly = BytecodePrinter.disassemble(bytecode);
+                // 2. Disassemble into pure human-readable JVM bytecode
+                String disassembly = BytecodePrinter.disassemble(bytecode);
 
-                    // Save .jvm disassembly text file
-                    Path jvmTextFile = outputDir.resolve(clsName + ".jvm");
-                    Files.writeString(jvmTextFile, disassembly);
-                    System.out.println("Saved pure JVM disassembly: " + jvmTextFile);
+                // Save .jvm disassembly text file
+                Path jvmTextFile = outputDir.resolve(clsName + ".jvm");
+                Files.writeString(jvmTextFile, disassembly);
+                System.out.println("Saved pure JVM disassembly: " + jvmTextFile);
 
-                    // Print pure JVM bytecode directly to console
-                    System.out.println("\n--- PURE JVM BYTECODE LISTING (" + clsName + ") ---");
-                    System.out.println(disassembly);
-                }
-
-                System.out.println("\n--- JVM DIRECT EXECUTION OUTPUT ---");
-                BytecodeClassLoader loader = new BytecodeClassLoader();
-                loader.addClasses(generatedClasses);
-                Class<?> compiledClass = loader.loadClass(className);
-                Method mainMethod = compiledClass.getMethod("main", String[].class);
-                mainMethod.invoke(null, (Object) new String[0]);
-                System.out.println("--- JVM EXECUTION COMPLETED ---");
-            } catch (UnsupportedOperationException e) {
-                System.out.println("[NOTE] Codegen extension hook: " + e.getMessage());
-            } catch (InvocationTargetException e) {
-                Throwable cause = e.getCause() != null ? e.getCause() : e;
-                System.err.println("Runtime error in compiled program: " + cause);
-            } catch (Exception e) {
-                System.err.println("Codegen error: " + e);
+                // Print pure JVM bytecode directly to console
+                System.out.println("\n--- PURE JVM BYTECODE LISTING (" + clsName + ") ---");
+                System.out.println(disassembly);
             }
 
+            if (compileOnly) return 0;
+            System.out.println("\n--- JVM DIRECT EXECUTION OUTPUT ---");
+            BytecodeClassLoader loader = new BytecodeClassLoader();
+            loader.addClasses(generatedClasses);
+            loader.runMain(className);
+            System.out.println("--- JVM EXECUTION COMPLETED ---");
+            return 0;
+        } catch (InvocationTargetException | ExceptionInInitializerError e) {
+            System.err.println("Runtime error in compiled program: " + e.getCause());
         } catch (IOException e) {
             System.err.println("IO Error: " + e.getMessage());
         } catch (Exception e) {
             System.err.println("Analysis Error: " + e.getMessage());
         }
+        return 1;
     }
 }

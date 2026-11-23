@@ -6,10 +6,20 @@ import java.util.Map;
 
 public final class RecordType extends Type {
     private final String name;
+    private final String declarationName;
     private final Map<String, Type> fields = new LinkedHashMap<>();
 
     public RecordType(String name) {
+        this(name, name);
+    }
+
+    RecordType(String name, String declarationName) {
         this.name = name;
+        this.declarationName = declarationName;
+    }
+
+    public String getDeclarationName() {
+        return declarationName;
     }
 
     void addField(String fieldName, Type type) {

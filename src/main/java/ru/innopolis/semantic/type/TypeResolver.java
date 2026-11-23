@@ -25,6 +25,7 @@ public class TypeResolver {
     private final Map<TypeSymbol, Type> namedTypes = new HashMap<>();
     private final Map<TypeNode, Type> nodeTypes = new HashMap<>();
     private final Set<TypeSymbol> inProgress = new HashSet<>();
+    private final Map<String, Integer> recordCounts = new HashMap<>();
 
     public TypeResolver(SemanticContext context, BiFunction<Expression, IScope, Type> expressionTyper) {
         this.context = context;
@@ -110,22 +111,30 @@ public class TypeResolver {
             context.addError(node.getSize().getPosition(), "Array size must be positive, got " + size);
             size = null;
         }
-        return new ArrayType(element, size, true);
+        return new ArrayType(element, size, true, node.getSize());
     }
 
     private Type resolveRecord(RecordTypeNode node, String name, IScope scope) {
-        RecordType record = new RecordType(name);
+        int occurrence = recordCounts.merge(name, 1, Integer::sum);
+        RecordType record = new RecordType(name, occurrence == 1 ? name : name + "$" + occurrence);
+        context.registerRecord(record, node);
         IScope fieldScope = context.getNodeScope(node) != null ? context.getNodeScope(node) : scope;
         for (VariableDeclarationNode field : node.getFields()) {
             Type fieldType;
+            Type initializer = field.getInitializer() == null ? null : expressionTyper.apply(field.getInitializer(), fieldScope);
             if (field.getType() != null) {
                 fieldType = resolve(field.getType(), fieldScope);
-            } else if (field.getInitializer() != null) {
-                fieldType = expressionTyper.apply(field.getInitializer(), fieldScope);
+                if (initializer != null && !TypeSystem.isAssignable(fieldType, initializer)) {
+                    context.addError(field.getPosition(), "Cannot initialize field '" + field.getName()
+                            + "' of type " + fieldType + " with " + initializer);
+                }
+            } else if (initializer != null) {
+                fieldType = initializer;
             } else {
                 fieldType = ErrorType.INSTANCE;
             }
             record.addField(field.getName(), fieldType);
+            context.putSymbolType(context.getDeclaredSymbol(field), fieldType);
         }
         return record;
     }

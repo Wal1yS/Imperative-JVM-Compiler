@@ -1,6 +1,8 @@
 package ru.innopolis.semantic.context;
 
 import ru.innopolis.ast.ASTNode;
+import ru.innopolis.ast.type.RecordTypeNode;
+import ru.innopolis.semantic.type.RecordType;
 import ru.innopolis.ast.expression.Expression;
 import ru.innopolis.ast.expression.RoutineCallExpressionNode;
 import ru.innopolis.ast.expression.VariableReferenceNode;
@@ -15,6 +17,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Collections;
 
 public class SemanticContext {
     private final List<SemanticError> errors = new ArrayList<>();
@@ -25,6 +29,15 @@ public class SemanticContext {
     private final Map<Expression, Type> expressionTypes = new HashMap<>();
     private final Map<Symbol, Type> symbolTypes = new HashMap<>();
     private GlobalScope globalScope;
+    private final Map<RecordType, RecordTypeNode> records = new LinkedHashMap<>();
+
+    public void registerRecord(RecordType type, RecordTypeNode declaration) {
+        records.put(type, declaration);
+    }
+
+    public Map<RecordType, RecordTypeNode> getRecords() {
+        return Collections.unmodifiableMap(records);
+    }
 
     public void addError(Span position, String message) {
         errors.add(new SemanticError(position, message));

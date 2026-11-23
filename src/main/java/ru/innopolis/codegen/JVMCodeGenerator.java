@@ -6,7 +6,6 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import ru.innopolis.ast.Declaration;
 import ru.innopolis.ast.ProgramNode;
-import ru.innopolis.ast.Statement;
 import ru.innopolis.ast.declaration.ParameterNode;
 import ru.innopolis.ast.declaration.RoutineDeclarationNode;
 import ru.innopolis.ast.declaration.TypeDeclarationNode;
@@ -22,16 +21,18 @@ import ru.innopolis.codegen.context.LocalVariableIndexManager;
 import ru.innopolis.codegen.type.JVMTypeMapper;
 import ru.innopolis.lexer.TokenType;
 import ru.innopolis.semantic.AnalysisResult;
-import ru.innopolis.semantic.symbol.ParameterSymbol;
-import ru.innopolis.semantic.symbol.RoutineSymbol;
 import ru.innopolis.semantic.symbol.Symbol;
 import ru.innopolis.semantic.symbol.VariableSymbol;
 import ru.innopolis.semantic.type.*;
 import ru.innopolis.semantic.visitor.ASTVisitor;
+import ru.innopolis.semantic.visitor.BaseASTVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * JVM Bytecode Generator implementing ASTVisitor.
@@ -39,6 +40,93 @@ import java.util.Map;
  * Core Architecture & Expression Engine implemented by Person 1 (Valerii Tiniakov).
  */
 public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
+    private final Map<RecordType, List<Symbol>> constructorParameters = new HashMap<>();
+    private final Map<Symbol, RecordType> constructorFields = new HashMap<>();
+
+    private ClassWriter newClassWriter(CodegenContext context) {
+        String recordPrefix = context.getProgramClassName() + "$Record_";
+        return new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
+            @Override
+            protected String getCommonSuperClass(String first, String second) {
+                // Generated records extend Object and are not yet available to ASM's loader.
+                if (first.startsWith(recordPrefix) || second.startsWith(recordPrefix)) return "java/lang/Object";
+                return super.getCommonSuperClass(first, second);
+            }
+        };
+    }
+
+    private void generateRecord(RecordType record, RecordTypeNode declaration, CodegenContext context) {
+        String program = context.getProgramClassName();
+        String owner = JVMTypeMapper.toInternalName(record, program);
+        ClassWriter writer = newClassWriter(context);
+        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, owner, null, "java/lang/Object", null);
+        record.getFields().forEach((name, type) -> writer.visitField(Opcodes.ACC_PUBLIC, name,
+                JVMTypeMapper.toDescriptor(type, program), null, null).visitEnd());
+
+        List<Symbol> parameters = recordParameters(record, context);
+        MethodVisitor mv = writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", constructorDescriptor(parameters, context), null, null);
+        LocalVariableIndexManager locals = new LocalVariableIndexManager(1);
+        for (Symbol parameter : parameters) locals.allocateSlot(parameter, context.getSymbolType(parameter));
+        context.setLocalIndexManager(locals);
+        context.setCurrentMethodVisitor(mv);
+        mv.visitCode();
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
+        for (VariableDeclarationNode field : declaration.getFields()) {
+            Type type = record.getField(field.getName());
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            if (field.getInitializer() == null) emitDefaultValue(type, context);
+            else field.getInitializer().accept(this, context);
+            mv.visitFieldInsn(Opcodes.PUTFIELD, owner, field.getName(), JVMTypeMapper.toDescriptor(type, program));
+            constructorFields.put(context.getSemanticContext().getDeclaredSymbol(field), record);
+        }
+        mv.visitInsn(Opcodes.RETURN);
+        mv.visitMaxs(0, 0);
+        mv.visitEnd();
+        writer.visitEnd();
+        context.addGeneratedClass(owner, writer.toByteArray());
+        constructorFields.clear();
+        context.setLocalIndexManager(null);
+        context.setCurrentMethodVisitor(null);
+    }
+
+    // Local record declarations may use enclosing variables in initializers or array bounds.
+    private List<Symbol> recordParameters(RecordType record, CodegenContext context) {
+        if (constructorParameters.containsKey(record)) return constructorParameters.get(record);
+        Set<Symbol> parameters = new LinkedHashSet<>();
+        var declaration = context.getSemanticContext().getRecords().get(record);
+        BaseASTVisitor<Void, Void> references = new BaseASTVisitor<>() {
+            @Override
+            public Void visit(VariableReferenceNode reference, Void unused) {
+                Symbol symbol = context.getResolvedSymbol(reference);
+                if (!context.isGlobalVariable(symbol)) parameters.add(symbol);
+                return null;
+            }
+        };
+        for (VariableDeclarationNode field : declaration.getFields()) {
+            if (field.getInitializer() != null) {
+                field.getInitializer().accept(references, null);
+                continue;
+            }
+            Type type = record.getField(field.getName());
+            if (type instanceof RecordType nested) parameters.addAll(recordParameters(nested, context));
+            while (type instanceof ArrayType array && array.isSized()) {
+                if (array.getSize() == null) array.getSizeExpression().accept(references, null);
+                type = array.getElementType();
+            }
+        }
+        for (VariableDeclarationNode field : declaration.getFields()) {
+            parameters.remove(context.getSemanticContext().getDeclaredSymbol(field));
+        }
+        List<Symbol> result = List.copyOf(parameters);
+        constructorParameters.put(record, result);
+        return result;
+    }
+
+    private String constructorDescriptor(List<Symbol> parameters, CodegenContext context) {
+        return JVMTypeMapper.toMethodDescriptor(parameters.stream().map(context::getSymbolType).toList(),
+                VoidType.INSTANCE, context.getProgramClassName());
+    }
 
     /**
      * Compiles an AnalysisResult into a map of generated class bytecodes.
@@ -61,7 +149,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(ProgramNode node, CodegenContext context) {
-        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        ClassWriter cw = newClassWriter(context);
         context.setCurrentClassWriter(cw);
 
         String internalClassName = context.getProgramClassName();
@@ -95,6 +183,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
             }
         }
 
+        context.getSemanticContext().getRecords().forEach((record, fields) -> generateRecord(record, fields, context));
         // 1.3 Generate static initializer <clinit>()V for global variables
         generateStaticInitializer(globalVars, context);
 
@@ -104,13 +193,6 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         // 1.5 Visit all routine declarations
         for (RoutineDeclarationNode routine : routines) {
             routine.accept(this, context);
-        }
-
-        // 1.6 Visit all type declarations (hook for Person 3 records)
-        for (Declaration decl : node.getDeclarations()) {
-            if (decl instanceof TypeDeclarationNode typeDecl) {
-                typeDecl.accept(this, context);
-            }
         }
 
         cw.visitEnd();
@@ -129,17 +211,14 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
     }
 
     private void registerRoutineSignature(RoutineDeclarationNode routine, CodegenContext context) {
+        if (routine.isForwardDeclaration()) return;
         List<Type> paramTypes = new ArrayList<>();
         for (ParameterNode p : routine.getParameters()) {
             Symbol sym = context.getSemanticContext().getDeclaredSymbol(p);
             paramTypes.add(context.getSymbolType(sym));
         }
 
-        Type retType = VoidType.INSTANCE;
-        if (routine.getReturnType() != null) {
-            TypeResolver resolver = new TypeResolver(context.getSemanticContext(), null);
-            retType = resolver.resolve(routine.getReturnType(), context.getSemanticContext().getGlobalScope());
-        }
+        Type retType = context.getSymbolType(context.getSemanticContext().getDeclaredSymbol(routine));
 
         String descriptor = JVMTypeMapper.toMethodDescriptor(paramTypes, retType, context.getProgramClassName());
         context.registerRoutineDescriptor(routine.getName(), descriptor);
@@ -161,7 +240,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
             if (varDecl.getInitializer() != null) {
                 varDecl.getInitializer().accept(this, context);
             } else {
-                emitDefaultValue(type, mv);
+                emitDefaultValue(type, context);
             }
             mv.visitFieldInsn(Opcodes.PUTSTATIC, context.getProgramClassName(), varDecl.getName(), desc);
         }
@@ -188,12 +267,9 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, context.getProgramClassName(), "main", mainDesc, false);
 
         // If routine main() returns a value (e.g. integer), pop it
-        if (!mainDesc.endsWith("V")) {
-            if (mainDesc.endsWith("D")) {
-                mv.visitInsn(Opcodes.POP2);
-            } else {
-                mv.visitInsn(Opcodes.POP);
-            }
+        int resultSlots = org.objectweb.asm.Type.getReturnType(mainDesc).getSize();
+        if (resultSlots > 0) {
+            mv.visitInsn(resultSlots == 2 ? Opcodes.POP2 : Opcodes.POP);
         }
 
         mv.visitInsn(Opcodes.RETURN);
@@ -265,7 +341,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         if (node.getInitializer() != null) {
             node.getInitializer().accept(this, context);
         } else {
-            emitDefaultValue(type, mv);
+            emitDefaultValue(type, context);
         }
 
         emitStoreInsn(type, slot, mv);
@@ -274,7 +350,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(TypeDeclarationNode node, CodegenContext context) {
-        // Person 3 hook for generating record classes
+        // Record classes are emitted once from their resolved declarations.
         return null;
     }
 
@@ -297,7 +373,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
     public Void visit(RealLiteralNode node, CodegenContext context) {
         MethodVisitor mv = context.getCurrentMethodVisitor();
         double val = node.getValue();
-        if (val == 0.0) {
+        if (Double.compare(val, 0.0) == 0) {
             mv.visitInsn(Opcodes.DCONST_0);
         } else if (val == 1.0) {
             mv.visitInsn(Opcodes.DCONST_1);
@@ -322,19 +398,26 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
 
     @Override
     public Void visit(VariableReferenceNode node, CodegenContext context) {
+        emitVariableLoad(context.getResolvedSymbol(node), context);
+        return null;
+    }
+
+    private void emitVariableLoad(Symbol sym, CodegenContext context) {
         MethodVisitor mv = context.getCurrentMethodVisitor();
-        Symbol sym = context.getResolvedSymbol(node);
         Type type = context.getSymbolType(sym);
 
         if (context.isGlobalVariable(sym)) {
             String fieldName = context.getGlobalFieldName(sym);
             String desc = JVMTypeMapper.toDescriptor(type, context.getProgramClassName());
             mv.visitFieldInsn(Opcodes.GETSTATIC, context.getProgramClassName(), fieldName, desc);
+        } else if (constructorFields.containsKey(sym)) {
+            mv.visitVarInsn(Opcodes.ALOAD, 0);
+            mv.visitFieldInsn(Opcodes.GETFIELD, JVMTypeMapper.toInternalName(constructorFields.get(sym),
+                    context.getProgramClassName()), sym.getName(), JVMTypeMapper.toDescriptor(type, context.getProgramClassName()));
         } else {
             int slot = context.getLocalSlot(sym);
             emitLoadInsn(type, slot, mv);
         }
-        return null;
     }
 
     @Override
@@ -474,7 +557,8 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         Type fromType = context.getExpressionType(node.getExpression());
         Type targetType = context.getExpressionType(node);
 
-        if (fromType == PrimitiveType.INTEGER && targetType == PrimitiveType.REAL) {
+        if ((fromType == PrimitiveType.INTEGER || fromType == PrimitiveType.BOOLEAN)
+                && targetType == PrimitiveType.REAL) {
             mv.visitInsn(Opcodes.I2D);
         } else if (fromType == PrimitiveType.REAL && targetType == PrimitiveType.INTEGER) {
             // Vitebsk specification: copying with rounding to nearest integer
@@ -483,15 +567,20 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         } else if (fromType == PrimitiveType.BOOLEAN && targetType == PrimitiveType.INTEGER) {
             // No-op: in JVM boolean is represented as int (0 or 1)
         } else if (fromType == PrimitiveType.INTEGER && targetType == PrimitiveType.BOOLEAN) {
-            // If != 0 then 1 else 0
-            Label lTrue = new Label();
-            Label lEnd = new Label();
-            mv.visitJumpInsn(Opcodes.IFNE, lTrue);
-            mv.visitInsn(Opcodes.ICONST_0);
-            mv.visitJumpInsn(Opcodes.GOTO, lEnd);
-            mv.visitLabel(lTrue);
+            Label valid = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitJumpInsn(Opcodes.IFEQ, valid);
+            mv.visitInsn(Opcodes.DUP);
             mv.visitInsn(Opcodes.ICONST_1);
-            mv.visitLabel(lEnd);
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, valid);
+            mv.visitInsn(Opcodes.POP);
+            mv.visitTypeInsn(Opcodes.NEW, "java/lang/IllegalArgumentException");
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn("integer as boolean requires 0 or 1");
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/IllegalArgumentException", "<init>",
+                    "(Ljava/lang/String;)V", false);
+            mv.visitInsn(Opcodes.ATHROW);
+            mv.visitLabel(valid);
         }
         return null;
     }
@@ -588,9 +677,19 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
             return null;
         }
 
-        // Person 3 hook for ArrayAccessNode and RecordAccessNode targets
-        throw new UnsupportedOperationException("Complex assignment targets are implemented by Person 3: "
-                + node.getTarget().getClass().getSimpleName());
+        if (node.getTarget() instanceof ArrayAccessNode element) {
+            element.getArray().accept(this, context);
+            element.getIndex().accept(this, context);
+            node.getValue().accept(this, context);
+            mv.visitInsn(arrayOpcode(context.getExpressionType(element), Opcodes.IASTORE, context));
+        } else if (node.getTarget() instanceof RecordAccessNode field) {
+            field.getRecord().accept(this, context);
+            node.getValue().accept(this, context);
+            emitFieldAccess(field, Opcodes.PUTFIELD, context);
+        } else {
+            throw new IllegalArgumentException("Invalid assignment target: " + node.getTarget());
+        }
+        return null;
     }
 
     @Override
@@ -634,6 +733,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
     public Void visit(ForLoopNode node, CodegenContext context) {
         MethodVisitor mv = context.getCurrentMethodVisitor();
         LocalVariableIndexManager locals = context.getLocalIndexManager();
+        locals.enterScope();
         RangeNode range = node.getRange();
         Symbol loopVariable = context.getSemanticContext().getDeclaredSymbol(node);
         Type elementType = context.getSymbolType(loopVariable);
@@ -672,13 +772,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         if (arrayIteration) {
             mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
             mv.visitVarInsn(Opcodes.ILOAD, counterSlot);
-            int loadOpcode = switch (JVMTypeMapper.toDescriptor(elementType, context.getProgramClassName())) {
-                case "I" -> Opcodes.IALOAD;
-                case "D" -> Opcodes.DALOAD;
-                case "Z" -> Opcodes.BALOAD;
-                default -> Opcodes.AALOAD;
-            };
-            mv.visitInsn(loadOpcode);
+            mv.visitInsn(arrayOpcode(elementType, Opcodes.IALOAD, context));
             emitStoreInsn(elementType, variableSlot, mv);
         }
         node.getBody().accept(this, context);
@@ -690,6 +784,7 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         mv.visitIincInsn(counterSlot, reverse ? -1 : 1);
         mv.visitJumpInsn(Opcodes.GOTO, body);
         mv.visitLabel(end);
+        locals.exitScope();
         return null;
     }
 
@@ -719,19 +814,37 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
     }
 
     // =========================================================================
-    // 5. HOOKS FOR PERSON 3 (Arrays and Records)
+    // 5. ARRAY ELEMENTS AND RECORD FIELDS
     // =========================================================================
 
     @Override
     public Void visit(ArrayAccessNode node, CodegenContext context) {
-        // Person 3 hook: array reading
+        node.getArray().accept(this, context);
+        node.getIndex().accept(this, context);
+        context.getCurrentMethodVisitor().visitInsn(arrayOpcode(context.getExpressionType(node), Opcodes.IALOAD, context));
         return null;
     }
 
     @Override
     public Void visit(RecordAccessNode node, CodegenContext context) {
-        // Person 3 hook: record member reading
+        node.getRecord().accept(this, context);
+        if (context.getExpressionType(node.getRecord()) instanceof ArrayType) {
+            context.getCurrentMethodVisitor().visitInsn(Opcodes.ARRAYLENGTH);
+        } else {
+            emitFieldAccess(node, Opcodes.GETFIELD, context);
+        }
         return null;
+    }
+
+    private int arrayOpcode(Type element, int integerOpcode, CodegenContext context) {
+        String descriptor = JVMTypeMapper.toDescriptor(element, context.getProgramClassName());
+        return org.objectweb.asm.Type.getType(descriptor).getOpcode(integerOpcode);
+    }
+
+    private void emitFieldAccess(RecordAccessNode field, int opcode, CodegenContext context) {
+        String owner = JVMTypeMapper.toInternalName(context.getExpressionType(field.getRecord()), context.getProgramClassName());
+        String descriptor = JVMTypeMapper.toDescriptor(context.getExpressionType(field), context.getProgramClassName());
+        context.getCurrentMethodVisitor().visitFieldInsn(opcode, owner, field.getFieldName(), descriptor);
     }
 
     @Override
@@ -779,15 +892,48 @@ public class JVMCodeGenerator implements ASTVisitor<Void, CodegenContext> {
         }
     }
 
-    private void emitDefaultValue(Type type, MethodVisitor mv) {
+    private void emitDefaultValue(Type type, CodegenContext context) {
+        MethodVisitor mv = context.getCurrentMethodVisitor();
         if (type == PrimitiveType.INTEGER || type == PrimitiveType.BOOLEAN) {
             mv.visitInsn(Opcodes.ICONST_0);
         } else if (type == PrimitiveType.REAL) {
             mv.visitInsn(Opcodes.DCONST_0);
         } else if (type == PrimitiveType.STRING) {
             mv.visitLdcInsn("");
+        } else if (type instanceof RecordType record) {
+            String owner = JVMTypeMapper.toInternalName(type, context.getProgramClassName());
+            mv.visitTypeInsn(Opcodes.NEW, owner);
+            mv.visitInsn(Opcodes.DUP);
+            List<Symbol> parameters = recordParameters(record, context);
+            for (Symbol parameter : parameters) emitVariableLoad(parameter, context);
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL, owner, "<init>", constructorDescriptor(parameters, context), false);
+        } else if (type instanceof ArrayType array && array.isSized()) {
+            emitNewArray(array, context);
         } else {
             mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+    }
+
+    private void emitNewArray(ArrayType array, CodegenContext context) {
+        MethodVisitor mv = context.getCurrentMethodVisitor();
+        int dimensions = 0;
+        Type element = array;
+        while (element instanceof ArrayType dimension && dimension.isSized()) {
+            if (dimension.getSize() != null) emitIntConstant(dimension.getSize(), mv);
+            else dimension.getSizeExpression().accept(this, context);
+            dimensions++;
+            element = dimension.getElementType();
+        }
+        if (dimensions > 1) {
+            mv.visitMultiANewArrayInsn(JVMTypeMapper.toDescriptor(array, context.getProgramClassName()), dimensions);
+        } else if (element == PrimitiveType.INTEGER) {
+            mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+        } else if (element == PrimitiveType.REAL) {
+            mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+        } else if (element == PrimitiveType.BOOLEAN) {
+            mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+        } else {
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, JVMTypeMapper.toInternalName(element, context.getProgramClassName()));
         }
     }
 

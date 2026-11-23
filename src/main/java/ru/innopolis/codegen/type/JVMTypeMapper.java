@@ -37,7 +37,7 @@ public final class JVMTypeMapper {
             return "[" + toDescriptor(arrayType.getElementType(), programClassName);
         }
         if (type instanceof RecordType recordType) {
-            return "L" + toRecordInternalName(recordType.getName(), programClassName) + ";";
+            return "L" + toRecordInternalName(recordType.getDeclarationName(), programClassName) + ";";
         }
         return "Ljava/lang/Object;";
     }
@@ -53,7 +53,7 @@ public final class JVMTypeMapper {
             return toDescriptor(arrayType, programClassName);
         }
         if (type instanceof RecordType recordType) {
-            return toRecordInternalName(recordType.getName(), programClassName);
+            return toRecordInternalName(recordType.getDeclarationName(), programClassName);
         }
         return "java/lang/Object";
     }

@@ -84,6 +84,7 @@ public class TypeChecker extends BaseASTVisitor<Type, IScope> {
                 .map(p -> resolver.resolve(p.getType(), scope))
                 .toList();
         Type returnType = resolver.resolve(node.getReturnType(), scope);
+        context.putSymbolType(routine, returnType);
 
         if (node.isForwardDeclaration()) {
             if (routine != null) forwardDeclarations.put(routine, node);

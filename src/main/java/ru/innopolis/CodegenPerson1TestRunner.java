@@ -1,9 +1,11 @@
 package ru.innopolis;
 
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.ClassNode;
 import ru.innopolis.ast.ProgramNode;
 import ru.innopolis.codegen.JVMCodeGenerator;
 import ru.innopolis.codegen.context.LocalVariableIndexManager;
-import ru.innopolis.codegen.runtime.BytecodeClassLoader;
+import ru.innopolis.runtime.BytecodeClassLoader;
 import ru.innopolis.lexer.Scanner;
 import ru.innopolis.lexer.token.Token;
 import ru.innopolis.parser.Parser;
@@ -27,7 +29,7 @@ public class CodegenPerson1TestRunner {
     private static int passed = 0;
     private static int failed = 0;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         System.out.println("==================================================");
         System.out.println("   RUNNING CODEGEN PERSON 1 TESTS (VALERII)       ");
         System.out.println("==================================================");
@@ -45,6 +47,9 @@ public class CodegenPerson1TestRunner {
         testStringDefaultValue();
         testScopedSlotReuse();
         testBlockLocalsExecution();
+        testRealConversions();
+        testArrayReturningMain();
+        testForLoops();
 
         System.out.println("\n==================================================");
         System.out.println("RESULTS: " + passed + " PASSED, " + failed + " FAILED");
@@ -56,6 +61,12 @@ public class CodegenPerson1TestRunner {
     }
 
     private static Class<?> compileToClass(String source, String className) throws Exception {
+        BytecodeClassLoader loader = new BytecodeClassLoader();
+        loader.addClasses(compile(source, className));
+        return loader.loadClass(className);
+    }
+
+    private static Map<String, byte[]> compile(String source, String className) throws Exception {
         Scanner scanner = new Scanner(source);
         List<Token> tokens = scanner.scanTokens();
         Parser parser = new Parser(tokens);
@@ -66,10 +77,66 @@ public class CodegenPerson1TestRunner {
             throw new IllegalStateException("Semantic analysis failed: " + analysisResult.getErrors());
         }
 
-        Map<String, byte[]> classes = JVMCodeGenerator.compile(analysisResult, className);
+        return JVMCodeGenerator.compile(analysisResult, className);
+    }
+
+    private static void testRealConversions() throws Exception {
+        Class<?> clazz = compileToClass("""
+                routine convert(b: boolean): real => b as real
+                routine divide(x: real): real => x / -0.0
+                routine main() is end
+                """, "TestRealConversions");
+        Method convert = clazz.getMethod("convert", boolean.class);
+        check("Boolean parameter converts to real",
+                convert.invoke(null, true).equals(1.0) && convert.invoke(null, false).equals(0.0),
+                "Expected 1.0 and 0.0");
+        double quotient = (double) clazz.getMethod("divide", double.class).invoke(null, 1.0);
+        check("Negative zero retains its sign", quotient == Double.NEGATIVE_INFINITY, "Got " + quotient);
+    }
+
+    private static void testArrayReturningMain() throws Exception {
+        Class<?> clazz = compileToClass("""
+                var called is false
+                routine main(): array real is
+                    var values: array [1] real
+                    called := true
+                    return values
+                end
+                """, "TestArrayReturningMain");
+        clazz.getMethod("main", String[].class).invoke(null, (Object) new String[0]);
+        check("JVM main discards an array reference", clazz.getField("called").getBoolean(null),
+                "Expected main to execute");
+    }
+
+    private static void testForLoops() throws Exception {
+        String name = "TestForLoops";
+        Map<String, byte[]> classes = compile("""
+                routine digits(values: array integer, limit: integer): integer is
+                    var n is 0
+                    for i in 1 .. limit loop
+                        n := 10 * n + i
+                    end
+                    for v in values reverse loop
+                        n := 10 * n + v
+                    end
+                    return n
+                end
+                routine main() is end
+                """, name);
         BytecodeClassLoader loader = new BytecodeClassLoader();
         loader.addClasses(classes);
-        return loader.loadClass(className);
+        Method digits = loader.loadClass(name).getMethod("digits", int[].class, int.class);
+        check("Forward range and reverse array iteration",
+                digits.invoke(null, new int[]{3, 4}, 2).equals(1243), "Expected 1243");
+        check("Empty range and empty array skip both bodies",
+                digits.invoke(null, new int[0], 0).equals(0), "Expected 0");
+
+        ClassNode generated = new ClassNode();
+        new ClassReader(classes.get(name)).accept(generated, 0);
+        int maxLocals = generated.methods.stream().filter(method -> method.name.equals("digits"))
+                .findFirst().orElseThrow().maxLocals;
+        // Two parameters, accumulator, and at most four slots for the active loop.
+        check("Sequential loops reuse local slots", maxLocals <= 7, "Got max_locals=" + maxLocals);
     }
 
     private static void check(String testName, boolean condition, String details) {
