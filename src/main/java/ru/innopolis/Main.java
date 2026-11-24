@@ -35,7 +35,7 @@ public class Main {
             System.err.println("Usage: Main [--compile | --run] <source-file>");
             return 2;
         }
-        String filePath = args.length == 0 ? "examples/error_accumulation_pass1.txt" : args[input];
+        String filePath = args.length == 0 ? "examples/1.txt" : args[input];
 
         try {
             Path inputPath = Path.of(filePath);
